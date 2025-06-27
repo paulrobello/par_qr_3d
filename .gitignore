@@ -79,4 +79,4 @@ __pypackages__/
 **/.terraform
 todos.md
 *.stl
-*.png
+/qr_code.png

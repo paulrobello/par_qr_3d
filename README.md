@@ -18,6 +18,11 @@ CLI tool to generate 3D printable STL files from QR codes. Create QR codes with 
 - **Type Safety**: Full type annotations throughout the codebase
 - **Modern Python**: Built with modern tooling including uv, ruff, and pyright
 
+## Pictures
+
+![qr_slicer.png](qr_slicer.png)
+![qr_term.png](qr_term.png)
+
 ## Technology Stack
 - **Python 3.11+** - Modern Python with latest features
 - **Typer** - Modern CLI framework with Rich integration
