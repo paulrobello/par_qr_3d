@@ -9,11 +9,13 @@ CLI tool to generate 3D printable STL files from QR codes. Create QR codes with 
 - **Multiple QR Code Types**: Generate QR codes for text, URLs, emails, phone numbers, SMS, WiFi credentials, and contact cards
 - **3D Model Generation**: Convert QR codes into 3D printable STL files with customizable dimensions
 - **Configurable Parameters**: Adjust QR code size, error correction level, base dimensions, and QR pattern depth
+- **Custom Colors**: Set custom colors for QR code modules and background using color names or hex codes
 - **Text Labels**: Add custom text labels to QR codes with configurable positioning (top/bottom)
-- **Image Overlays**: Add logo or image overlays to the center of QR codes with preserved grayscale
+- **Image Overlays**: Add logo or image overlays to the center of QR codes (grayscale for STL, full color for PNG-only)
 - **Terminal Display**: View QR codes directly in your terminal using rich-pixels
 - **Border Cropping**: Automatically crop white borders from QR codes (default: 15 pixels)
 - **Inverted Mode**: Create inverted QR codes with recessed black areas
+- **PNG-Only Mode**: Option to generate only PNG images without STL files
 - **PNG Export**: Optionally save QR codes as PNG images alongside STL files
 - **Rich Terminal UI**: Beautiful output with progress indicators and formatted results
 - **Type Safety**: Full type annotations throughout the codebase
@@ -194,11 +196,34 @@ par_qr_3d qr "Website" -I logo.png -Z 30
 ```
 
 The overlay image is:
-- Automatically converted to grayscale while preserving all gray levels
+- Automatically converted to grayscale for STL generation (preserving all gray levels)
+- Kept in full color when using --no-stl option
 - Centered on a white background to maintain QR code scannability
 - Sized as a percentage of the QR code (10-30%, default 20%)
 - Supports common image formats (PNG, JPG, etc.)
 - Properly handles transparency if present
+
+#### Custom Colors
+Customize the colors of your QR code using color names or hex codes:
+```bash
+# Use named colors
+par_qr_3d qr "Colorful QR" --base-color lightblue --qr-color darkgreen
+
+# Use hex color codes
+par_qr_3d qr "Brand Colors" --base-color "#f0f0f0" --qr-color "#0066cc"
+
+# Combine with other features
+par_qr_3d qr "Company Site" \
+  --base-color yellow \
+  --qr-color red \
+  --overlay-image logo.png \
+  --label "Scan Me!"
+
+# Short options
+par_qr_3d qr "Custom" -bc pink -qc purple
+```
+
+Note: Custom colors are preserved in PNG output. STL files only contain geometry, not color information.
 
 #### Border Cropping
 Crop white border from QR code before converting to STL (default: 15 pixels):
@@ -232,6 +257,31 @@ Only generate the STL file:
 ```bash
 par_qr_3d qr "STL only" --no-save-png
 ```
+
+#### PNG-Only Mode
+Skip STL generation and only create PNG images:
+```bash
+# Basic PNG-only generation
+par_qr_3d qr "PNG only" --no-stl
+
+# With full color overlay (not converted to grayscale)
+par_qr_3d qr "Color Logo" --no-stl --overlay-image logo.png
+
+# With custom colors
+par_qr_3d qr "Colorful PNG" --no-stl \
+  --base-color "#ff6b6b" \
+  --qr-color "#4ecdc4" \
+  --overlay-image brand_logo.png
+
+# Short option
+par_qr_3d qr "Quick PNG" -N
+```
+
+This is useful for:
+- Quick QR code generation without 3D modeling
+- Preserving full color in overlays
+- Faster processing when STL is not needed
+- Creating QR codes for digital use only
 
 #### Debug Mode
 Enable verbose output for troubleshooting:
@@ -297,6 +347,21 @@ par_qr_3d qr "https://company.com" \
   --base-height 100
 ```
 
+#### Branded QR Code (PNG Only)
+```bash
+par_qr_3d qr "https://brand.com/promo" \
+  --type url \
+  --no-stl \
+  --base-color "#f8f9fa" \
+  --qr-color "#007bff" \
+  --overlay-image brand_logo.png \
+  --overlay-size 30 \
+  --label "SCAN FOR 20% OFF" \
+  --output promo_qr \
+  --size 600 \
+  --error-correction H
+```
+
 ## Output Files
 
 The tool generates two files by default:
@@ -350,6 +415,9 @@ The STL model includes:
 | `--label-threshold` | `-k` | Threshold for label text binarization (0-255) | `128` |
 | `--overlay-image` | `-I` | Path to image to overlay in center of QR code | `None` |
 | `--overlay-size` | `-Z` | Size of overlay as percentage of QR code (10-30) | `20` |
+| `--base-color` | `-bc` | Background color (name or hex code) | `white` |
+| `--qr-color` | `-qc` | QR module color (name or hex code) | `black` |
+| `--no-stl` | `-N` | Skip STL generation (PNG only) | `False` |
 | `--save-png/--no-save-png` | `-p/-P` | Save PNG image | `True` |
 | `--display` | `-T` | Display QR code in terminal | `False` |
 | `--debug` | `-D` | Enable debug output | `False` |

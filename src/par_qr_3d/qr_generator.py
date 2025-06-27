@@ -151,6 +151,8 @@ def generate_qr_code(
     size: int = 200,
     error_correction: ErrorCorrectionLevel = ErrorCorrectionLevel.LOW,
     border: int = 4,
+    base_color: str = "white",
+    qr_color: str = "black",
     **format_kwargs: str,
 ) -> Image.Image:
     """Generate a QR code image.
@@ -161,6 +163,8 @@ def generate_qr_code(
         size: The size of the QR code image in pixels (width and height)
         error_correction: Error correction level
         border: Border size in modules
+        base_color: Background color (name or hex code)
+        qr_color: QR code module color (name or hex code)
         **format_kwargs: Additional parameters for specific QR types
 
     Returns:
@@ -181,8 +185,8 @@ def generate_qr_code(
     qr.add_data(formatted_data)
     qr.make(fit=True)
 
-    # Create image
-    img = qr.make_image(fill_color="black", back_color="white")
+    # Create image with custom colors
+    img = qr.make_image(fill_color=qr_color, back_color=base_color)
 
     # Cast to PIL Image for type checker
     pil_img = cast(Image.Image, img)
@@ -324,6 +328,7 @@ def add_overlay_to_qr(
     qr_image: Image.Image,
     overlay_path: Path,
     size_percent: int = 20,
+    convert_to_grayscale: bool = True,
 ) -> Image.Image:
     """Add an overlay image to the center of a QR code.
 
@@ -331,15 +336,17 @@ def add_overlay_to_qr(
         qr_image: PIL Image of the QR code
         overlay_path: Path to the overlay image file
         size_percent: Size of overlay as percentage of QR code size (10-30)
+        convert_to_grayscale: If True, convert overlay to grayscale (default for STL)
 
     Returns:
         New PIL Image with overlay added
 
     Note:
-        The overlay is converted to grayscale while preserving all gray levels
-        (not just black and white). A white background is added behind the overlay
-        to ensure it doesn't interfere with QR code reading. Transparency is
-        properly handled if the overlay has an alpha channel.
+        When convert_to_grayscale is True, the overlay is converted to grayscale
+        while preserving all gray levels (not just black and white). When False,
+        the overlay retains its original colors. A white background is added behind
+        the overlay to ensure it doesn't interfere with QR code reading. Transparency
+        is properly handled if the overlay has an alpha channel.
     """
     try:
         # Load overlay image
@@ -366,14 +373,19 @@ def add_overlay_to_qr(
             alpha_channel = overlay.split()[3]  # Extract alpha channel
             overlay = overlay.convert("RGB")  # Convert to RGB for processing
 
-        # Convert overlay to grayscale while preserving all gray levels
-        if overlay.mode != "L":
+        # Convert overlay to grayscale if requested (for STL generation)
+        if convert_to_grayscale and overlay.mode != "L":
             overlay = overlay.convert("L")
 
         # Create a white background for the overlay area
         # This ensures the overlay doesn't break QR code scanning
         bg_size = int(overlay_size * 1.2)  # Add some padding
-        white_bg = Image.new("L", (bg_size, bg_size), 255)  # White in grayscale
+
+        # Create background in appropriate mode
+        if convert_to_grayscale and overlay.mode == "L":
+            white_bg = Image.new("L", (bg_size, bg_size), 255)  # White in grayscale
+        else:
+            white_bg = Image.new("RGB", (bg_size, bg_size), "white")  # White in RGB
 
         # Center the overlay on the white background
         bg_x = (bg_size - overlay.width) // 2
@@ -387,8 +399,9 @@ def add_overlay_to_qr(
         else:
             white_bg.paste(overlay, (bg_x, bg_y))
 
-        # Convert the grayscale background to RGB for final composition
-        white_bg = white_bg.convert("RGB")
+        # Convert to RGB for final composition if needed
+        if white_bg.mode != "RGB":
+            white_bg = white_bg.convert("RGB")
 
         # Calculate position to center the background+overlay on QR code
         x = (qr_width - bg_size) // 2
@@ -397,7 +410,8 @@ def add_overlay_to_qr(
         # Paste the white background with overlay onto the QR code
         result.paste(white_bg, (x, y))
 
-        logger.info(f"Added overlay image at {size_percent}% size ({overlay_size}x{overlay_size} pixels)")
+        mode_str = "grayscale" if convert_to_grayscale else "color"
+        logger.info(f"Added {mode_str} overlay image at {size_percent}% size ({overlay_size}x{overlay_size} pixels)")
         return result
 
     except Exception as e:

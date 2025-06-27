@@ -225,6 +225,30 @@ def qr_command(
             max=30,
         ),
     ] = 20,
+    base_color: Annotated[
+        str,
+        typer.Option(
+            "--base-color",
+            "-bc",
+            help="Base/background color (name or hex code)",
+        ),
+    ] = "white",
+    qr_color: Annotated[
+        str,
+        typer.Option(
+            "--qr-color",
+            "-qc",
+            help="QR code module color (name or hex code)",
+        ),
+    ] = "black",
+    no_stl: Annotated[
+        bool,
+        typer.Option(
+            "--no-stl",
+            "-N",
+            help="Skip STL generation (only create PNG)",
+        ),
+    ] = False,
     wifi_password: Annotated[
         str | None,
         typer.Option(
@@ -323,6 +347,9 @@ def qr_command(
         label_threshold: Threshold value for label text binarization (0-255).
         overlay_image: Path to an image file to overlay in the center of the QR code.
         overlay_size_percent: Size of the overlay as a percentage of QR code size (10-30%).
+        base_color: Background color of the QR code (name or hex code).
+        qr_color: Color of the QR code modules (name or hex code).
+        no_stl: If True, skip STL generation and only create PNG.
         wifi_password: WiFi password (for WiFi QR codes).
         wifi_security: WiFi security type (WPA, WEP, or nopass).
         email_subject: Email subject (for email QR codes).
@@ -379,6 +406,8 @@ def qr_command(
             qr_type=qr_type,
             size=size,
             error_correction=error_correction,
+            base_color=base_color,
+            qr_color=qr_color,
             **format_kwargs,
         )
 
@@ -401,7 +430,7 @@ def qr_command(
         if overlay_image:
             from .qr_generator import add_overlay_to_qr
 
-            qr_image = add_overlay_to_qr(qr_image, overlay_image, overlay_size_percent)
+            qr_image = add_overlay_to_qr(qr_image, overlay_image, overlay_size_percent, convert_to_grayscale=not no_stl)
             logger.debug(f"Added overlay image from {overlay_image}")
 
         # Display in terminal if requested
@@ -448,18 +477,18 @@ def qr_command(
             png_path = save_qr_code(qr_image, output.with_suffix(".png"))
             console.print(f"[green]✓[/green] Saved QR code image: {png_path}")
 
-        # Convert to STL
-        console.print("[blue]Converting to 3D model...[/blue]")
-        stl_path = convert_qr_to_stl(
-            qr_image=qr_image,
-            output_path=output.with_suffix(".stl"),
-            base_size_mm=(base_width, base_height),
-            base_height_mm=base_thickness,
-            qr_height_mm=qr_depth,
-            invert=invert,
-        )
-
-        console.print(f"[green]✓[/green] Created STL file: {stl_path}")
+        # Convert to STL if not disabled
+        if not no_stl:
+            console.print("[blue]Converting to 3D model...[/blue]")
+            stl_path = convert_qr_to_stl(
+                qr_image=qr_image,
+                output_path=output.with_suffix(".stl"),
+                base_size_mm=(base_width, base_height),
+                base_height_mm=base_thickness,
+                qr_height_mm=qr_depth,
+                invert=invert,
+            )
+            console.print(f"[green]✓[/green] Created STL file: {stl_path}")
 
         # Display summary
         console.print("\n[bold]Summary:[/bold]")
@@ -467,12 +496,23 @@ def qr_command(
             "QR Type": qr_type.value,
             "QR Size": f"{size}x{size} pixels",
             "Error Correction": error_correction.value,
+            "Base Color": base_color,
+            "QR Color": qr_color,
             "Border Crop": f"{border_crop} pixels" if border_crop > 0 else "None",
             "Label": f'"{label}" ({label_position})' if label else "None",
-            "STL Base Size": f"{base_width}x{base_height} mm",
-            "Total Height": f"{base_thickness + qr_depth} mm",
-            "Inverted": "Yes" if invert else "No",
         }
+
+        if not no_stl:
+            summary.update(
+                {
+                    "STL Base Size": f"{base_width}x{base_height} mm",
+                    "Total Height": f"{base_thickness + qr_depth} mm",
+                    "Inverted": "Yes" if invert else "No",
+                }
+            )
+        else:
+            summary["STL Generation"] = "Disabled"
+
         console.print(Pretty(summary))
 
     except KeyboardInterrupt:
