@@ -10,8 +10,9 @@ CLI tool to generate 3D printable STL files from QR codes. Create QR codes with 
 - **3D Model Generation**: Convert QR codes into 3D printable STL files with customizable dimensions
 - **Configurable Parameters**: Adjust QR code size, error correction level, base dimensions, and QR pattern depth
 - **Text Labels**: Add custom text labels to QR codes with configurable positioning (top/bottom)
+- **Image Overlays**: Add logo or image overlays to the center of QR codes with preserved grayscale
 - **Terminal Display**: View QR codes directly in your terminal using rich-pixels
-- **Border Cropping**: Automatically crop white borders from QR codes (default: 2 pixels)
+- **Border Cropping**: Automatically crop white borders from QR codes (default: 15 pixels)
 - **Inverted Mode**: Create inverted QR codes with recessed black areas
 - **PNG Export**: Optionally save QR codes as PNG images alongside STL files
 - **Rich Terminal UI**: Beautiful output with progress indicators and formatted results
@@ -176,6 +177,29 @@ par_qr_3d qr "Data" --label "My Label" --label-threshold 192
 par_qr_3d qr "Data" --label "My Label" -k 128
 ```
 
+#### Image Overlays
+Add a logo or image overlay to the center of your QR code:
+```bash
+# Add overlay with default 20% size
+par_qr_3d qr "https://example.com" --overlay-image logo.png
+
+# Custom overlay size (25% of QR code)
+par_qr_3d qr "Company URL" --overlay-image company_logo.jpg --overlay-size 25
+
+# Combine with label
+par_qr_3d qr "Contact Info" --overlay-image avatar.png --label "John Doe"
+
+# Short options
+par_qr_3d qr "Website" -I logo.png -Z 30
+```
+
+The overlay image is:
+- Automatically converted to grayscale while preserving all gray levels
+- Centered on a white background to maintain QR code scannability
+- Sized as a percentage of the QR code (10-30%, default 20%)
+- Supports common image formats (PNG, JPG, etc.)
+- Properly handles transparency if present
+
 #### Border Cropping
 Crop white border from QR code before converting to STL (default: 15 pixels):
 ```bash
@@ -258,6 +282,21 @@ par_qr_3d qr "https://shop.example.com/product/12345" \
   --qr-depth 3
 ```
 
+#### Company Website with Logo
+```bash
+par_qr_3d qr "https://company.com" \
+  --type url \
+  --overlay-image company_logo.png \
+  --overlay-size 25 \
+  --label "Visit Our Website" \
+  --label-position bottom \
+  --output company_qr \
+  --size 400 \
+  --error-correction H \
+  --base-width 100 \
+  --base-height 100
+```
+
 ## Output Files
 
 The tool generates two files by default:
@@ -309,6 +348,8 @@ The STL model includes:
 | `--label` | `-l` | Add text label to QR code | `None` |
 | `--label-position` | `-L` | Label position: top or bottom | `top` |
 | `--label-threshold` | `-k` | Threshold for label text binarization (0-255) | `128` |
+| `--overlay-image` | `-I` | Path to image to overlay in center of QR code | `None` |
+| `--overlay-size` | `-Z` | Size of overlay as percentage of QR code (10-30) | `20` |
 | `--save-png/--no-save-png` | `-p/-P` | Save PNG image | `True` |
 | `--display` | `-T` | Display QR code in terminal | `False` |
 | `--debug` | `-D` | Enable debug output | `False` |

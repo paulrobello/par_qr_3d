@@ -204,6 +204,27 @@ def qr_command(
             max=255,
         ),
     ] = 128,
+    overlay_image: Annotated[
+        Path | None,
+        typer.Option(
+            "--overlay-image",
+            "-I",
+            help="Path to image to overlay in center of QR code",
+            exists=True,
+            file_okay=True,
+            dir_okay=False,
+        ),
+    ] = None,
+    overlay_size_percent: Annotated[
+        int,
+        typer.Option(
+            "--overlay-size",
+            "-Z",
+            help="Size of overlay image as percentage of QR code (10-30)",
+            min=10,
+            max=30,
+        ),
+    ] = 20,
     wifi_password: Annotated[
         str | None,
         typer.Option(
@@ -300,6 +321,8 @@ def qr_command(
         label: Optional text label to add to the QR code.
         label_position: Position of the label (top or bottom).
         label_threshold: Threshold value for label text binarization (0-255).
+        overlay_image: Path to an image file to overlay in the center of the QR code.
+        overlay_size_percent: Size of the overlay as a percentage of QR code size (10-30%).
         wifi_password: WiFi password (for WiFi QR codes).
         wifi_security: WiFi security type (WPA, WEP, or nopass).
         email_subject: Email subject (for email QR codes).
@@ -373,6 +396,13 @@ def qr_command(
                 )
                 raise typer.Exit(code=1)
             qr_image = add_label_to_qr(qr_image, label, label_position.lower(), threshold=label_threshold)
+
+        # Add overlay image if requested (after label to preserve grayscale)
+        if overlay_image:
+            from .qr_generator import add_overlay_to_qr
+
+            qr_image = add_overlay_to_qr(qr_image, overlay_image, overlay_size_percent)
+            logger.debug(f"Added overlay image from {overlay_image}")
 
         # Display in terminal if requested
         if display:

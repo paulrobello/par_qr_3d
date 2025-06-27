@@ -320,6 +320,91 @@ def add_label_to_qr(
     return final_image
 
 
+def add_overlay_to_qr(
+    qr_image: Image.Image,
+    overlay_path: Path,
+    size_percent: int = 20,
+) -> Image.Image:
+    """Add an overlay image to the center of a QR code.
+
+    Args:
+        qr_image: PIL Image of the QR code
+        overlay_path: Path to the overlay image file
+        size_percent: Size of overlay as percentage of QR code size (10-30)
+
+    Returns:
+        New PIL Image with overlay added
+
+    Note:
+        The overlay is converted to grayscale while preserving all gray levels
+        (not just black and white). A white background is added behind the overlay
+        to ensure it doesn't interfere with QR code reading. Transparency is
+        properly handled if the overlay has an alpha channel.
+    """
+    try:
+        # Load overlay image
+        overlay = Image.open(overlay_path)
+        logger.debug(f"Loaded overlay image: {overlay.size}, mode: {overlay.mode}")
+
+        # Convert QR code to RGB if needed
+        if qr_image.mode != "RGB":
+            qr_image = qr_image.convert("RGB")
+
+        # Create a copy to avoid modifying the original
+        result = qr_image.copy()
+
+        # Calculate overlay size
+        qr_width, qr_height = qr_image.size
+        overlay_size = int(min(qr_width, qr_height) * size_percent / 100)
+
+        # Resize overlay maintaining aspect ratio
+        overlay.thumbnail((overlay_size, overlay_size), Image.Resampling.LANCZOS)
+
+        # Store alpha channel if present
+        alpha_channel = None
+        if overlay.mode == "RGBA":
+            alpha_channel = overlay.split()[3]  # Extract alpha channel
+            overlay = overlay.convert("RGB")  # Convert to RGB for processing
+
+        # Convert overlay to grayscale while preserving all gray levels
+        if overlay.mode != "L":
+            overlay = overlay.convert("L")
+
+        # Create a white background for the overlay area
+        # This ensures the overlay doesn't break QR code scanning
+        bg_size = int(overlay_size * 1.2)  # Add some padding
+        white_bg = Image.new("L", (bg_size, bg_size), 255)  # White in grayscale
+
+        # Center the overlay on the white background
+        bg_x = (bg_size - overlay.width) // 2
+        bg_y = (bg_size - overlay.height) // 2
+
+        # Paste with alpha channel if it existed
+        if alpha_channel:
+            # Resize alpha channel to match overlay size
+            alpha_channel = alpha_channel.resize(overlay.size)
+            white_bg.paste(overlay, (bg_x, bg_y), alpha_channel)
+        else:
+            white_bg.paste(overlay, (bg_x, bg_y))
+
+        # Convert the grayscale background to RGB for final composition
+        white_bg = white_bg.convert("RGB")
+
+        # Calculate position to center the background+overlay on QR code
+        x = (qr_width - bg_size) // 2
+        y = (qr_height - bg_size) // 2
+
+        # Paste the white background with overlay onto the QR code
+        result.paste(white_bg, (x, y))
+
+        logger.info(f"Added overlay image at {size_percent}% size ({overlay_size}x{overlay_size} pixels)")
+        return result
+
+    except Exception as e:
+        logger.error(f"Failed to add overlay image: {e}")
+        raise ValueError(f"Could not process overlay image: {e}")
+
+
 def save_qr_code(
     image: Image.Image,
     output_path: Path | str,
