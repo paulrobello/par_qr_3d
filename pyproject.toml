@@ -1,0 +1,118 @@
+[project]
+name = "par_qr_3d"
+dynamic = [
+    "version",
+]
+description = "Par QR 3D"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+    { name = "Paul Robello", email = "probello@gmail.com" },
+]
+maintainers = [
+    { name = "Paul Robello", email = "probello@gmail.com" },
+]
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Environment :: Console",
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: End Users/Desktop",
+    "Intended Audience :: Other Audience",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows :: Windows 10",
+    "Operating System :: Microsoft :: Windows :: Windows 11",
+    "Operating System :: POSIX :: Linux",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Typing :: Typed",
+]
+keywords = [
+    "ai",
+    "cli",
+    "tui",
+    "terminal",
+]
+dependencies = [
+    "python-dotenv>=1.1.1",
+    "rich>=14.0.0",
+    "typer>=0.16.0",
+    "qrcode[pil]>=8.2",
+    "numpy-stl>=3.2.0",
+    "rich-pixels>=3.0.1",
+]
+packages = [
+    "src/par_qr_3d",
+]
+
+[project.license]
+file = "LICENSE"
+
+[project.urls]
+Homepage = "https://github.com/paulrobello/par_qr_3d"
+Documentation = "https://github.com/paulrobello/par_qr_3d/blob/main/README.md"
+Repository = "https://github.com/paulrobello/par_qr_3d"
+Issues = "https://github.com/paulrobello/par_qr_3d/issues"
+Discussions = "https://github.com/paulrobello/par_qr_3d/discussions"
+Wiki = "https://github.com/paulrobello/par_qr_3d/wiki"
+
+[project.scripts]
+par_qr_3d = "par_qr_3d.__main__:app"
+
+[build-system]
+requires = [
+    "hatchling",
+    "wheel",
+]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "build>=1.2.2",
+    "pyright>=1.1.396",
+    "pre-commit>=4.1.0",
+    "ruff>=0.11.0",
+    "pyinstrument>=5.0.1",
+    "scalene>=1.5.51",
+]
+
+[tool.hatch.version]
+path = "src/par_qr_3d/__init__.py"
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = [
+    "src/par_qr_3d",
+]
+include = [
+    "py.typed",
+    "**/*.py",
+    "**/*.html",
+    "**/*.gif",
+    "**/*.jpg",
+    "**/*.png",
+    "**/*.md",
+    "**/*.tcss",
+    "**/*.ttf",
+]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "src/par_qr_3d",
+    "LICENSE",
+    "README.md",
+    "pyproject.toml",
+]
+exclude = [
+    "*.pyc",
+    "__pycache__",
+    "*.so",
+    "*.dylib",
+]
+

@@ -1,0 +1,16 @@
+# Example configuration file for new_project_template
+# Copy this to config.toml and adjust as needed
+
+# AI Provider configuration
+ai_provider = "OpenAI"  # Options: OpenAI, Anthropic, Google, Groq, XAI, Mistral, Bedrock, Ollama, LlamaCpp
+model = ""  # Leave empty to use default model for provider
+light_model = false  # Use lighter/faster model variant
+ai_base_url = ""  # Custom base URL for OpenAI-compatible providers
+temperature = 0.5  # Response creativity (0.0-2.0)
+debug = false  # Enable debug output
+
+# TODO: Add your custom configuration options here
+# Examples:
+# max_tokens = 1000
+# system_prompt = "You are a helpful assistant."
+# output_format = "markdown"
