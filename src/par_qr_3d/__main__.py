@@ -254,9 +254,17 @@ def qr_command(
         typer.Option(
             "--format",
             "-F",
-            help="3D file format: stl, 3mf (3mf includes color)",
+            help="3D file format: stl, 3mf (3mf includes color support)",
         ),
     ] = "stl",
+    separate_components: Annotated[
+        bool,
+        typer.Option(
+            "--separate-components",
+            "-SC",
+            help="Export 3MF with separate objects for each color (better slicer support)",
+        ),
+    ] = False,
     frame_style: Annotated[
         str | None,
         typer.Option(
@@ -402,7 +410,8 @@ def qr_command(
         base_color: Background color of the QR code (name or hex code).
         qr_color: Color of the QR code modules (name or hex code).
         no_stl: If True, skip STL generation and only create PNG.
-        output_format: 3D file format to use (stl or 3mf). 3MF supports color information.
+        output_format: 3D file format to use (stl or 3mf). 3MF includes color information.
+        separate_components: Export 3MF with separate objects for each color (better slicer support).
         frame_style: Style of decorative frame (square, rounded, hexagon, octagon).
         frame_width: Width of the frame border in pixels.
         frame_color: Color of the frame (name or hex code).
@@ -558,7 +567,7 @@ def qr_command(
             console.print(f"[blue]Converting to 3D model ({output_format.upper()})...[/blue]")
 
             if output_format.lower() == "3mf":
-                # Convert to 3MF format
+                # Convert to 3MF format with color support
                 model_path = convert_qr_to_3mf(
                     qr_image=qr_image,
                     output_path=output.with_suffix(".3mf"),
@@ -566,6 +575,9 @@ def qr_command(
                     base_height_mm=base_thickness,
                     qr_height_mm=qr_depth,
                     invert=invert,
+                    base_color=base_color,
+                    qr_color=qr_color,
+                    separate_components=separate_components,
                 )
                 console.print(f"[green]✓[/green] Created 3MF file: {model_path}")
             else:
@@ -605,6 +617,8 @@ def qr_command(
                 "Total Height": f"{base_thickness + qr_depth} mm",
                 "Inverted": "Yes" if invert else "No",
             }
+            if output_format.lower() == "3mf":
+                model_info["Colors"] = f"Base: {base_color}, QR: {qr_color}"
             summary.update(model_info)
         else:
             summary["3D Generation"] = "Disabled"

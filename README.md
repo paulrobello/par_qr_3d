@@ -8,7 +8,7 @@ CLI tool to generate 3D printable STL files from QR codes. Create QR codes with 
 
 - **Multiple QR Code Types**: Generate QR codes for text, URLs, emails, phone numbers, SMS, WiFi credentials, and contact cards
 - **3D Model Generation**: Convert QR codes into 3D printable STL files with customizable dimensions
-- **3MF Format Support**: Export to modern 3MF format for better compatibility with 3D printing software
+- **3MF Format Support**: Export to 3MF format with full color support for multi-material 3D printing
 - **Configurable Parameters**: Adjust QR code size, error correction level, base dimensions, and QR pattern depth
 - **Custom Colors**: Set custom colors for QR code modules and background using color names or hex codes
 - **Text Labels**: Add custom text labels to QR codes with configurable positioning (top/bottom)
@@ -347,25 +347,38 @@ Export to different 3D file formats:
 par_qr_3d qr "STL Model" --output my_model
 # Creates my_model.stl
 
-# 3MF format
-par_qr_3d qr "3D Model" --format 3mf
-# Creates a 3MF file (geometry only, no color support)
+# 3MF format with colors
+par_qr_3d qr "Colored Model" --format 3mf \
+  --base-color lightblue \
+  --qr-color darkgreen
+# Creates a 3MF file with embedded color information
+
+# 3MF with separate components for better slicer support
+par_qr_3d qr "Slicer Ready" --format 3mf \
+  --separate-components \
+  --base-color white \
+  --qr-color black
+# Creates separate mesh objects for each color
 
 # Combine 3MF with other features
 par_qr_3d qr "Advanced 3MF" --format 3mf \
+  --base-color "#ff6b6b" \
+  --qr-color "#4ecdc4" \
   --frame hexagon \
-  --style circle \
-  --size 400
+  --frame-color gold \
+  --style circle
 
 # Short option
 par_qr_3d qr "Quick 3MF" -F 3mf
 ```
 
 3MF advantages:
+- Full color support for multi-material 3D printing
 - Better compatibility with modern slicers
 - More efficient file format than STL
 - Supported by Windows 3D Builder, PrusaSlicer, Cura, etc.
-- Future-proof format (though color export is not yet supported by trimesh)
+- Uses lib3mf for proper material and color handling
+- Option to export as separate components for improved slicer compatibility
 
 #### PNG-Only Mode
 Skip STL generation and only create PNG images:
@@ -508,6 +521,24 @@ par_qr_3d qr "John Smith" \
   --error-correction H
 ```
 
+#### Multi-Color 3MF Model
+```bash
+par_qr_3d qr "https://colorful.example.com" \
+  --type url \
+  --format 3mf \
+  --base-color coral \
+  --qr-color teal \
+  --style circle \
+  --frame octagon \
+  --frame-width 25 \
+  --frame-color navy \
+  --overlay-image logo.png \
+  --label "SCAN ME" \
+  --output colorful_qr \
+  --size 400 \
+  --base-width 80 \
+  --base-height 80
+```
 
 ## Output Files
 
@@ -516,13 +547,14 @@ The tool generates two files by default:
 1. **PNG Image** (`*.png`): The QR code as a standard image file for preview and testing
 2. **3D Model File**: 
    - **STL** (`*.stl`): Standard 3D model format (default)
-   - **3MF** (`*.3mf`): Modern 3D format (more efficient than STL)
+   - **3MF** (`*.3mf`): Modern 3D format with embedded color information
 
 The 3D model includes:
 - A solid base plate covering the entire area
 - Black QR code modules extruded upward from the base plate
 - White areas remain at base height
 - Properly closed mesh suitable for 3D printing
+- Color materials embedded in 3MF files for multi-material printing
 
 ## 3D Printing Tips
 
@@ -572,7 +604,8 @@ The 3D model includes:
 | `--style` | `-y` | QR module style: square, circle, dot, rounded | `square` |
 | `--style-size` | `-ys` | Size ratio for styled modules (0.5-1.0) | `0.8` |
 | `--no-stl` | `-N` | Skip STL generation (PNG only) | `False` |
-| `--format` | `-F` | 3D file format: stl, 3mf (geometry only) | `stl` |
+| `--format` | `-F` | 3D file format: stl, 3mf (3mf includes colors) | `stl` |
+| `--separate-components` | `-SC` | Export 3MF with separate objects for each color | `False` |
 | `--save-png/--no-save-png` | `-p/-P` | Save PNG image | `True` |
 | `--display` | `-T` | Display QR code in terminal | `False` |
 | `--debug` | `-D` | Enable debug output | `False` |

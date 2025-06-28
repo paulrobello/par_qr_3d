@@ -6,9 +6,16 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-import trimesh
 from PIL import Image
 from stl import mesh  # type: ignore[import-untyped]
+
+try:
+    import lib3mf
+    from lib3mf import get_wrapper
+
+    HAS_LIB3MF = True
+except ImportError:
+    HAS_LIB3MF = False
 
 from .logging_config import get_logger
 
@@ -306,11 +313,11 @@ def convert_qr_to_3mf(
     base_height_mm: float = 2.0,
     qr_height_mm: float = 2.0,
     invert: bool = False,
+    base_color: str = "white",
+    qr_color: str = "black",
+    separate_components: bool = False,
 ) -> Path:
-    """Convert a QR code image to a 3MF file.
-
-    Note: 3MF export via trimesh does not currently support color information.
-    The exported file will contain only geometry data.
+    """Convert a QR code image to a 3MF file with color support using lib3mf.
 
     Args:
         qr_image: PIL Image of the QR code
@@ -319,16 +326,37 @@ def convert_qr_to_3mf(
         base_height_mm: Height of the base layer in mm
         qr_height_mm: Additional height for QR code modules in mm
         invert: If True, white areas are raised instead of black
+        base_color: Color name or hex code for the base/background
+        qr_color: Color name or hex code for the QR modules
+        separate_components: If True, create separate objects for each color
 
     Returns:
         Path to the saved 3MF file
     """
+    if not HAS_LIB3MF:
+        raise ImportError("lib3mf is required for colored 3MF export. Install with: pip install lib3mf")
+
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Ensure it's a 3MF file
     if output_path.suffix.lower() != ".3mf":
         output_path = output_path.with_suffix(".3mf")
+
+    # Convert colors to RGB
+    from PIL import ImageColor
+
+    try:
+        base_rgb = ImageColor.getrgb(base_color)
+    except ValueError:
+        logger.warning(f"Invalid base color '{base_color}', using white")
+        base_rgb = (255, 255, 255)
+
+    try:
+        qr_rgb = ImageColor.getrgb(qr_color)
+    except ValueError:
+        logger.warning(f"Invalid QR color '{qr_color}', using black")
+        qr_rgb = (0, 0, 0)
 
     # Convert image to height map
     height_map = image_to_3d_array(
@@ -349,31 +377,204 @@ def convert_qr_to_3mf(
 
     logger.debug(f"Image size: {img_width}x{img_height}, pixel size: {pixel_size:.3f}mm")
 
-    # Create STL mesh first
-    stl_mesh = create_stl_from_heightmap(height_map, pixel_size=pixel_size)
+    # Initialize lib3mf
+    wrapper = get_wrapper()
+    model = wrapper.CreateModel()  # type: ignore[attr-defined]
 
-    # Convert STL mesh to trimesh
-    vertices = stl_mesh.vectors.reshape(-1, 3)
-    faces = np.arange(len(vertices)).reshape(-1, 3)
+    if separate_components:
+        # Create separate mesh objects for each color
+        base_mesh = model.AddMeshObject()  # type: ignore[attr-defined]
+        base_mesh.SetName("Base")
 
-    # Remove duplicate vertices and update faces
-    unique_vertices, inverse_indices = np.unique(vertices, axis=0, return_inverse=True)
-    updated_faces = inverse_indices[faces]
+        qr_mesh = model.AddMeshObject()  # type: ignore[attr-defined]
+        qr_mesh.SetName("QR Modules")
 
-    # Create trimesh object
-    trimesh_obj = trimesh.Trimesh(
-        vertices=unique_vertices,
-        faces=updated_faces,
-    )
+        # Create color group for separate components
+        color_group = model.AddColorGroup()  # type: ignore[attr-defined]
 
-    # Fix any issues with the mesh
-    trimesh_obj.fix_normals()
+        # Add colors
+        base_color_id = color_group.AddColor(
+            wrapper.FloatRGBAToColor(base_rgb[0] / 255.0, base_rgb[1] / 255.0, base_rgb[2] / 255.0, 1.0)
+        )
+        qr_color_id = color_group.AddColor(
+            wrapper.FloatRGBAToColor(qr_rgb[0] / 255.0, qr_rgb[1] / 255.0, qr_rgb[2] / 255.0, 1.0)
+        )
 
-    # Export as 3MF
-    trimesh_obj.export(str(output_path), file_type="3mf")
+        # Set object colors
+        base_mesh.SetObjectLevelProperty(color_group.GetResourceID(), base_color_id)
+        qr_mesh.SetObjectLevelProperty(color_group.GetResourceID(), qr_color_id)
+    else:
+        # Single object with material group
+        material_group = model.AddBaseMaterialGroup()  # type: ignore[attr-defined]
+
+        # Add materials with colors
+        base_material_id = material_group.AddMaterial(
+            f"{base_color} base",
+            wrapper.FloatRGBAToColor(base_rgb[0] / 255.0, base_rgb[1] / 255.0, base_rgb[2] / 255.0, 1.0),
+        )
+        qr_material_id = material_group.AddMaterial(
+            f"{qr_color} QR",
+            wrapper.FloatRGBAToColor(qr_rgb[0] / 255.0, qr_rgb[1] / 255.0, qr_rgb[2] / 255.0, 1.0),
+        )
+
+        # Create single mesh object
+        mesh_object = model.AddMeshObject()  # type: ignore[attr-defined]
+        mesh_object.SetName("QR Code")
+        triangle_properties = []
+
+    # Build QR modules
+    for y in range(img_height):
+        for x in range(img_width):
+            x0, y0 = x * pixel_size, y * pixel_size
+            x1, y1 = (x + 1) * pixel_size, (y + 1) * pixel_size
+            z0 = base_height_mm  # Start from base height
+            z1 = height_map[y, x]
+
+            # Skip if this pixel is at base height (no need to create a box)
+            if abs(z1 - base_height_mm) < 0.001:
+                continue
+
+            # Choose which mesh to add to
+            current_mesh = qr_mesh if separate_components else mesh_object
+
+            # Add 8 vertices for the box
+            vertices_indices = []
+            for vx, vy, vz in [
+                (x0, y0, z0),
+                (x1, y0, z0),
+                (x1, y1, z0),
+                (x0, y1, z0),
+                (x0, y0, z1),
+                (x1, y0, z1),
+                (x1, y1, z1),
+                (x0, y1, z1),
+            ]:
+                position = lib3mf.Position()
+                position.Coordinates[0] = float(vx)
+                position.Coordinates[1] = float(vy)
+                position.Coordinates[2] = float(vz)
+                vertices_indices.append(current_mesh.AddVertex(position))
+
+            # Create triangles for the box (12 triangles, 2 per face)
+            triangle_indices = [
+                # Bottom face
+                (0, 2, 1),
+                (0, 3, 2),
+                # Top face
+                (4, 5, 6),
+                (4, 6, 7),
+                # Front face
+                (0, 1, 5),
+                (0, 5, 4),
+                # Back face
+                (3, 7, 6),
+                (3, 6, 2),
+                # Left face
+                (0, 4, 7),
+                (0, 7, 3),
+                # Right face
+                (1, 2, 6),
+                (1, 6, 5),
+            ]
+
+            # Add triangles and set material
+            for v0, v1, v2 in triangle_indices:
+                triangle = lib3mf.Triangle()
+                triangle.Indices[0] = vertices_indices[v0]
+                triangle.Indices[1] = vertices_indices[v1]
+                triangle.Indices[2] = vertices_indices[v2]
+                current_mesh.AddTriangle(triangle)
+
+                if not separate_components:
+                    # Create triangle properties with QR material
+                    prop = lib3mf.TriangleProperties()
+                    prop.ResourceID = material_group.GetResourceID()
+                    prop.PropertyIDs[0] = qr_material_id
+                    prop.PropertyIDs[1] = qr_material_id
+                    prop.PropertyIDs[2] = qr_material_id
+                    triangle_properties.append(prop)
+
+    # Add complete base plate as a box
+    base_width = img_width * pixel_size
+    base_depth = img_height * pixel_size
+
+    # Choose which mesh to add base to
+    base_target_mesh = base_mesh if separate_components else mesh_object
+
+    # Create 8 vertices for the base box
+    base_vertices = []
+    for vx, vy, vz in [
+        (0, 0, 0),  # 0: bottom-left-bottom
+        (base_width, 0, 0),  # 1: bottom-right-bottom
+        (base_width, base_depth, 0),  # 2: top-right-bottom
+        (0, base_depth, 0),  # 3: top-left-bottom
+        (0, 0, base_height_mm),  # 4: bottom-left-top
+        (base_width, 0, base_height_mm),  # 5: bottom-right-top
+        (base_width, base_depth, base_height_mm),  # 6: top-right-top
+        (0, base_depth, base_height_mm),  # 7: top-left-top
+    ]:
+        position = lib3mf.Position()
+        position.Coordinates[0] = float(vx)
+        position.Coordinates[1] = float(vy)
+        position.Coordinates[2] = float(vz)
+        base_vertices.append(base_target_mesh.AddVertex(position))
+
+    # Create triangles for all 6 faces of the base box
+    base_triangle_indices = [
+        # Bottom face
+        (0, 2, 1),
+        (0, 3, 2),
+        # Top face
+        (4, 5, 6),
+        (4, 6, 7),
+        # Front face
+        (0, 1, 5),
+        (0, 5, 4),
+        # Back face
+        (3, 7, 6),
+        (3, 6, 2),
+        # Left face
+        (0, 4, 7),
+        (0, 7, 3),
+        # Right face
+        (1, 2, 6),
+        (1, 6, 5),
+    ]
+
+    for v0, v1, v2 in base_triangle_indices:
+        triangle = lib3mf.Triangle()
+        triangle.Indices[0] = base_vertices[v0]
+        triangle.Indices[1] = base_vertices[v1]
+        triangle.Indices[2] = base_vertices[v2]
+        base_target_mesh.AddTriangle(triangle)
+
+        if not separate_components:
+            # Create triangle properties with base material
+            prop = lib3mf.TriangleProperties()
+            prop.ResourceID = material_group.GetResourceID()
+            prop.PropertyIDs[0] = base_material_id
+            prop.PropertyIDs[1] = base_material_id
+            prop.PropertyIDs[2] = base_material_id
+            triangle_properties.append(prop)
+
+    # Apply properties and add build items
+    if separate_components:
+        # Add both meshes as build items
+        model.AddBuildItem(base_mesh, wrapper.GetIdentityTransform())  # type: ignore[attr-defined]
+        model.AddBuildItem(qr_mesh, wrapper.GetIdentityTransform())  # type: ignore[attr-defined]
+    else:
+        # Apply all triangle properties to single mesh
+        mesh_object.SetAllTriangleProperties(triangle_properties)
+        # Add single build item
+        model.AddBuildItem(mesh_object, wrapper.GetIdentityTransform())  # type: ignore[attr-defined]
+
+    # Write to file
+    writer = model.QueryWriter("3mf")  # type: ignore[attr-defined]
+    writer.WriteToFile(str(output_path))
 
     total_height = base_height_mm + qr_height_mm
     logger.info(f"Saved 3MF file to: {output_path}")
     logger.info(f"Model dimensions: {base_size_mm[0]:.1f} x {base_size_mm[1]:.1f} x {total_height:.1f} mm")
+    logger.info(f"Colors: base={base_color}, QR={qr_color}")
 
     return output_path

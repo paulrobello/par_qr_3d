@@ -108,6 +108,16 @@ wheels = [
 ]
 
 [[package]]
+name = "lib3mf"
+version = "2.4.1"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/3b/86/c578d8187b4b42b713d224afd38d5a9b85a65f91171353715004386dde5b/lib3mf-2.4.1-py3-none-macosx_10_9_universal2.whl", hash = "sha256:f8e3f520130e7cb84086ef6945e72ed94ad3b44fc89bde54e5aa9f8226642093", size = 2214390 },
+    { url = "https://files.pythonhosted.org/packages/ac/f4/9f24de3dd8ded325483301ceae696b365e48431431a997ea02edca9a9d92/lib3mf-2.4.1-py3-none-manylinux2014_x86_64.whl", hash = "sha256:549962487d4f3f5395a5098e2cad730c0582c55c43c08b24b43e7a6306483637", size = 1547181 },
+    { url = "https://files.pythonhosted.org/packages/f6/c7/8364c7bb413e0b56056fce979af87965e4e6dfac4b48c727276a1c4efd14/lib3mf-2.4.1-py3-none-win_amd64.whl", hash = "sha256:0f11b9baae2a667454fc68c5f6dcd6d76064d1059f6af1dc575c92f3a3ea21e5", size = 795633 },
+]
+
+[[package]]
 name = "lxml"
 version = "6.0.0"
 source = { registry = "https://pypi.org/simple" }
@@ -364,6 +374,7 @@ name = "par-qr-3d"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "lib3mf" },
     { name = "lxml" },
     { name = "networkx" },
     { name = "numpy-stl" },
@@ -388,6 +399,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "lib3mf", specifier = ">=2.4.1" },
     { name = "lxml", specifier = ">=6.0.0" },
     { name = "networkx", specifier = ">=3.5" },
     { name = "numpy-stl", specifier = ">=3.2.0" },

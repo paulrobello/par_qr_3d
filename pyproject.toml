@@ -48,6 +48,7 @@ dependencies = [
     "lxml>=6.0.0",
     "scipy>=1.16.0",
     "networkx>=3.5",
+    "lib3mf>=2.4.1",
 ]
 packages = [
     "src/par_qr_3d",
