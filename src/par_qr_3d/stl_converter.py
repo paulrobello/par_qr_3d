@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+import trimesh
 from PIL import Image
 from stl import mesh  # type: ignore[import-untyped]
 
@@ -293,6 +294,86 @@ def convert_qr_to_stl(
 
     total_height = base_height_mm + qr_height_mm
     logger.info(f"Saved STL file to: {output_path}")
+    logger.info(f"Model dimensions: {base_size_mm[0]:.1f} x {base_size_mm[1]:.1f} x {total_height:.1f} mm")
+
+    return output_path
+
+
+def convert_qr_to_3mf(
+    qr_image: Image.Image,
+    output_path: Path | str,
+    base_size_mm: tuple[float, float] = (50.0, 50.0),
+    base_height_mm: float = 2.0,
+    qr_height_mm: float = 2.0,
+    invert: bool = False,
+) -> Path:
+    """Convert a QR code image to a 3MF file.
+
+    Note: 3MF export via trimesh does not currently support color information.
+    The exported file will contain only geometry data.
+
+    Args:
+        qr_image: PIL Image of the QR code
+        output_path: Path to save the 3MF file
+        base_size_mm: Size of the base in mm (width, height)
+        base_height_mm: Height of the base layer in mm
+        qr_height_mm: Additional height for QR code modules in mm
+        invert: If True, white areas are raised instead of black
+
+    Returns:
+        Path to the saved 3MF file
+    """
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Ensure it's a 3MF file
+    if output_path.suffix.lower() != ".3mf":
+        output_path = output_path.with_suffix(".3mf")
+
+    # Convert image to height map
+    height_map = image_to_3d_array(
+        qr_image,
+        base_height=base_height_mm,
+        qr_height=qr_height_mm,
+        invert=invert,
+    )
+
+    # Flip the height map vertically to correct the orientation
+    height_map = np.flipud(height_map)
+
+    # Calculate pixel size to achieve desired base size
+    img_height, img_width = height_map.shape
+    pixel_size_x = base_size_mm[0] / img_width
+    pixel_size_y = base_size_mm[1] / img_height
+    pixel_size = (pixel_size_x + pixel_size_y) / 2
+
+    logger.debug(f"Image size: {img_width}x{img_height}, pixel size: {pixel_size:.3f}mm")
+
+    # Create STL mesh first
+    stl_mesh = create_stl_from_heightmap(height_map, pixel_size=pixel_size)
+
+    # Convert STL mesh to trimesh
+    vertices = stl_mesh.vectors.reshape(-1, 3)
+    faces = np.arange(len(vertices)).reshape(-1, 3)
+
+    # Remove duplicate vertices and update faces
+    unique_vertices, inverse_indices = np.unique(vertices, axis=0, return_inverse=True)
+    updated_faces = inverse_indices[faces]
+
+    # Create trimesh object
+    trimesh_obj = trimesh.Trimesh(
+        vertices=unique_vertices,
+        faces=updated_faces,
+    )
+
+    # Fix any issues with the mesh
+    trimesh_obj.fix_normals()
+
+    # Export as 3MF
+    trimesh_obj.export(str(output_path), file_type="3mf")
+
+    total_height = base_height_mm + qr_height_mm
+    logger.info(f"Saved 3MF file to: {output_path}")
     logger.info(f"Model dimensions: {base_size_mm[0]:.1f} x {base_size_mm[1]:.1f} x {total_height:.1f} mm")
 
     return output_path

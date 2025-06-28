@@ -14,7 +14,7 @@ from rich_pixels import Pixels
 from . import __application_binary__, __application_title__, __version__
 from .logging_config import get_logger, setup_logging
 from .qr_generator import ErrorCorrectionLevel, QRType, add_label_to_qr, crop_qr_border, generate_qr_code, save_qr_code
-from .stl_converter import convert_qr_to_stl
+from .stl_converter import convert_qr_to_3mf, convert_qr_to_stl
 
 # Create the main Typer app with rich help
 app = typer.Typer(
@@ -249,6 +249,58 @@ def qr_command(
             help="Skip STL generation (only create PNG)",
         ),
     ] = False,
+    output_format: Annotated[
+        str,
+        typer.Option(
+            "--format",
+            "-F",
+            help="3D file format: stl, 3mf (3mf includes color)",
+        ),
+    ] = "stl",
+    frame_style: Annotated[
+        str | None,
+        typer.Option(
+            "--frame",
+            "-f",
+            help="Frame style: none, square, rounded, hexagon, octagon",
+        ),
+    ] = None,
+    frame_width: Annotated[
+        int,
+        typer.Option(
+            "--frame-width",
+            "-fw",
+            help="Frame width in pixels",
+            min=5,
+            max=50,
+        ),
+    ] = 10,
+    frame_color: Annotated[
+        str,
+        typer.Option(
+            "--frame-color",
+            "-fc",
+            help="Frame color (name or hex code)",
+        ),
+    ] = "black",
+    module_style: Annotated[
+        str,
+        typer.Option(
+            "--style",
+            "-y",
+            help="QR module style: square, circle, dot, rounded",
+        ),
+    ] = "square",
+    module_size_ratio: Annotated[
+        float,
+        typer.Option(
+            "--style-size",
+            "-ys",
+            help="Size ratio for styled modules (0.5-1.0)",
+            min=0.5,
+            max=1.0,
+        ),
+    ] = 0.8,
     wifi_password: Annotated[
         str | None,
         typer.Option(
@@ -350,6 +402,12 @@ def qr_command(
         base_color: Background color of the QR code (name or hex code).
         qr_color: Color of the QR code modules (name or hex code).
         no_stl: If True, skip STL generation and only create PNG.
+        output_format: 3D file format to use (stl or 3mf). 3MF supports color information.
+        frame_style: Style of decorative frame (square, rounded, hexagon, octagon).
+        frame_width: Width of the frame border in pixels.
+        frame_color: Color of the frame (name or hex code).
+        module_style: Style of QR code modules (square, circle, dot, rounded).
+        module_size_ratio: Size ratio for styled modules relative to grid size.
         wifi_password: WiFi password (for WiFi QR codes).
         wifi_security: WiFi security type (WPA, WEP, or nopass).
         email_subject: Email subject (for email QR codes).
@@ -408,6 +466,8 @@ def qr_command(
             error_correction=error_correction,
             base_color=base_color,
             qr_color=qr_color,
+            module_style=module_style,
+            module_size_ratio=module_size_ratio,
             **format_kwargs,
         )
 
@@ -432,6 +492,22 @@ def qr_command(
 
             qr_image = add_overlay_to_qr(qr_image, overlay_image, overlay_size_percent, convert_to_grayscale=not no_stl)
             logger.debug(f"Added overlay image from {overlay_image}")
+
+        # Add frame if requested
+        if frame_style:
+            from .qr_generator import add_frame_to_qr
+
+            # Validate frame style
+            valid_styles = ["square", "rounded", "hexagon", "octagon"]
+            if frame_style.lower() not in valid_styles:
+                console.print(
+                    f"[bold red]Error:[/bold red] Invalid frame style '{frame_style}'. "
+                    f"Must be one of: {', '.join(valid_styles)}"
+                )
+                raise typer.Exit(code=1)
+
+            qr_image = add_frame_to_qr(qr_image, frame_style.lower(), frame_width, frame_color)
+            logger.debug(f"Added {frame_style} frame with width {frame_width}")
 
         # Display in terminal if requested
         if display:
@@ -477,18 +553,32 @@ def qr_command(
             png_path = save_qr_code(qr_image, output.with_suffix(".png"))
             console.print(f"[green]✓[/green] Saved QR code image: {png_path}")
 
-        # Convert to STL if not disabled
+        # Convert to 3D format if not disabled
         if not no_stl:
-            console.print("[blue]Converting to 3D model...[/blue]")
-            stl_path = convert_qr_to_stl(
-                qr_image=qr_image,
-                output_path=output.with_suffix(".stl"),
-                base_size_mm=(base_width, base_height),
-                base_height_mm=base_thickness,
-                qr_height_mm=qr_depth,
-                invert=invert,
-            )
-            console.print(f"[green]✓[/green] Created STL file: {stl_path}")
+            console.print(f"[blue]Converting to 3D model ({output_format.upper()})...[/blue]")
+
+            if output_format.lower() == "3mf":
+                # Convert to 3MF format
+                model_path = convert_qr_to_3mf(
+                    qr_image=qr_image,
+                    output_path=output.with_suffix(".3mf"),
+                    base_size_mm=(base_width, base_height),
+                    base_height_mm=base_thickness,
+                    qr_height_mm=qr_depth,
+                    invert=invert,
+                )
+                console.print(f"[green]✓[/green] Created 3MF file: {model_path}")
+            else:
+                # Default to STL
+                model_path = convert_qr_to_stl(
+                    qr_image=qr_image,
+                    output_path=output.with_suffix(".stl"),
+                    base_size_mm=(base_width, base_height),
+                    base_height_mm=base_thickness,
+                    qr_height_mm=qr_depth,
+                    invert=invert,
+                )
+                console.print(f"[green]✓[/green] Created STL file: {model_path}")
 
         # Display summary
         console.print("\n[bold]Summary:[/bold]")
@@ -502,16 +592,22 @@ def qr_command(
             "Label": f'"{label}" ({label_position})' if label else "None",
         }
 
+        if module_style != "square":
+            summary["Module Style"] = f"{module_style} ({int(module_size_ratio * 100)}% size)"
+
+        if frame_style:
+            summary["Frame"] = f"{frame_style} ({frame_width}px, {frame_color})"
+
         if not no_stl:
-            summary.update(
-                {
-                    "STL Base Size": f"{base_width}x{base_height} mm",
-                    "Total Height": f"{base_thickness + qr_depth} mm",
-                    "Inverted": "Yes" if invert else "No",
-                }
-            )
+            model_info = {
+                "Format": output_format.upper(),
+                "Base Size": f"{base_width}x{base_height} mm",
+                "Total Height": f"{base_thickness + qr_depth} mm",
+                "Inverted": "Yes" if invert else "No",
+            }
+            summary.update(model_info)
         else:
-            summary["STL Generation"] = "Disabled"
+            summary["3D Generation"] = "Disabled"
 
         console.print(Pretty(summary))
 

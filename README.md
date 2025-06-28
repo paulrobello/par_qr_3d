@@ -8,10 +8,13 @@ CLI tool to generate 3D printable STL files from QR codes. Create QR codes with 
 
 - **Multiple QR Code Types**: Generate QR codes for text, URLs, emails, phone numbers, SMS, WiFi credentials, and contact cards
 - **3D Model Generation**: Convert QR codes into 3D printable STL files with customizable dimensions
+- **3MF Format Support**: Export to modern 3MF format for better compatibility with 3D printing software
 - **Configurable Parameters**: Adjust QR code size, error correction level, base dimensions, and QR pattern depth
 - **Custom Colors**: Set custom colors for QR code modules and background using color names or hex codes
 - **Text Labels**: Add custom text labels to QR codes with configurable positioning (top/bottom)
 - **Image Overlays**: Add logo or image overlays to the center of QR codes (grayscale for STL, full color for PNG-only)
+- **Decorative Frames**: Add stylish frames around QR codes (square, rounded, hexagon, octagon)
+- **Artistic Patterns**: Replace standard squares with circles, dots, or rounded modules
 - **Terminal Display**: View QR codes directly in your terminal using rich-pixels
 - **Border Cropping**: Automatically crop white borders from QR codes (default: 15 pixels)
 - **Inverted Mode**: Create inverted QR codes with recessed black areas
@@ -225,6 +228,85 @@ par_qr_3d qr "Custom" -bc pink -qc purple
 
 Note: Custom colors are preserved in PNG output. STL files only contain geometry, not color information.
 
+#### Decorative Frames
+Add stylish frames around your QR codes:
+```bash
+# Square frame with custom width and color
+par_qr_3d qr "Framed QR" --frame square --frame-width 15 --frame-color navy
+
+# Rounded corners frame
+par_qr_3d qr "Elegant QR" --frame rounded --frame-width 20 --frame-color "#ff6b6b"
+
+# Hexagonal frame
+par_qr_3d qr "Hex Frame" --frame hexagon --frame-width 25 --frame-color darkgreen
+
+# Octagonal frame
+par_qr_3d qr "Oct Frame" --frame octagon --frame-width 10 --frame-color gold
+
+# Combine with other features
+par_qr_3d qr "Complete Package" \
+  --frame rounded \
+  --frame-width 15 \
+  --frame-color purple \
+  --overlay-image logo.png \
+  --label "PREMIUM" \
+  --base-color lavender \
+  --qr-color indigo
+
+# Short options
+par_qr_3d qr "Quick Frame" -f rounded -fw 20 -fc red
+```
+
+Frame styles available:
+- **square**: Simple rectangular frame
+- **rounded**: Frame with rounded corners
+- **hexagon**: Six-sided frame
+- **octagon**: Eight-sided frame
+
+Note: Frames add visual appeal and can help QR codes stand out. The frame is included in both PNG and STL outputs.
+
+#### Artistic Patterns
+Replace standard square QR modules with artistic shapes:
+```bash
+# Circle modules (smooth, modern look)
+par_qr_3d qr "Artistic QR" --style circle
+
+# Dot pattern (minimalist style)
+par_qr_3d qr "Dotted QR" --style dot --style-size 0.6
+
+# Rounded squares (softer appearance)
+par_qr_3d qr "Soft QR" --style rounded --style-size 0.85
+
+# Combine with colors for striking designs
+par_qr_3d qr "Designer QR" \
+  --style circle \
+  --style-size 0.9 \
+  --base-color lavender \
+  --qr-color purple
+
+# Full artistic design
+par_qr_3d qr "https://art.example.com" \
+  --style dot \
+  --style-size 0.7 \
+  --frame hexagon \
+  --frame-color gold \
+  --base-color black \
+  --qr-color gold
+
+# Short options
+par_qr_3d qr "Quick Art" -y circle -ys 0.8
+```
+
+Available styles:
+- **square**: Traditional QR code modules (default)
+- **circle**: Circular modules for a modern look
+- **dot**: Small dots for a minimalist aesthetic
+- **rounded**: Rounded corners on square modules
+
+The `--style-size` parameter controls the size of modules relative to the grid (0.5-1.0, default 0.8).
+
+Note: Artistic patterns maintain QR code scannability while adding visual appeal. Smaller module sizes may require higher error correction levels for reliable scanning.
+
 #### Border Cropping
 Crop white border from QR code before converting to STL (default: 15 pixels):
 ```bash
@@ -257,6 +339,33 @@ Only generate the STL file:
 ```bash
 par_qr_3d qr "STL only" --no-save-png
 ```
+
+#### 3D File Formats
+Export to different 3D file formats:
+```bash
+# Default STL format
+par_qr_3d qr "STL Model" --output my_model
+# Creates my_model.stl
+
+# 3MF format
+par_qr_3d qr "3D Model" --format 3mf
+# Creates a 3MF file (geometry only, no color support)
+
+# Combine 3MF with other features
+par_qr_3d qr "Advanced 3MF" --format 3mf \
+  --frame hexagon \
+  --style circle \
+  --size 400
+
+# Short option
+par_qr_3d qr "Quick 3MF" -F 3mf
+```
+
+3MF advantages:
+- Better compatibility with modern slicers
+- More efficient file format than STL
+- Supported by Windows 3D Builder, PrusaSlicer, Cura, etc.
+- Future-proof format (though color export is not yet supported by trimesh)
 
 #### PNG-Only Mode
 Skip STL generation and only create PNG images:
@@ -362,14 +471,54 @@ par_qr_3d qr "https://brand.com/promo" \
   --error-correction H
 ```
 
+#### Premium Framed QR Code
+```bash
+par_qr_3d qr "https://premium.example.com" \
+  --type url \
+  --frame hexagon \
+  --frame-width 30 \
+  --frame-color gold \
+  --base-color black \
+  --qr-color gold \
+  --overlay-image premium_logo.png \
+  --label "VIP ACCESS" \
+  --label-position bottom \
+  --output vip_qr \
+  --size 400 \
+  --base-width 80 \
+  --base-height 80 \
+  --qr-depth 5
+```
+
+#### Artistic Business Card QR
+```bash
+par_qr_3d qr "John Smith" \
+  --type contact \
+  --contact-phone "+1-555-0123" \
+  --contact-email "john@company.com" \
+  --style dot \
+  --style-size 0.7 \
+  --base-color "#f5f5f5" \
+  --qr-color "#333333" \
+  --frame rounded \
+  --frame-width 12 \
+  --frame-color "#666666" \
+  --output business_qr \
+  --size 300 \
+  --error-correction H
+```
+
+
 ## Output Files
 
 The tool generates two files by default:
 
 1. **PNG Image** (`*.png`): The QR code as a standard image file for preview and testing
-2. **STL File** (`*.stl`): The 3D model ready for slicing and 3D printing
+2. **3D Model File**: 
+   - **STL** (`*.stl`): Standard 3D model format (default)
+   - **3MF** (`*.3mf`): Modern 3D format (more efficient than STL)
 
-The STL model includes:
+The 3D model includes:
 - A solid base plate covering the entire area
 - Black QR code modules extruded upward from the base plate
 - White areas remain at base height
@@ -417,7 +566,13 @@ The STL model includes:
 | `--overlay-size` | `-Z` | Size of overlay as percentage of QR code (10-30) | `20` |
 | `--base-color` | `-bc` | Background color (name or hex code) | `white` |
 | `--qr-color` | `-qc` | QR module color (name or hex code) | `black` |
+| `--frame` | `-f` | Frame style: square, rounded, hexagon, octagon | `None` |
+| `--frame-width` | `-fw` | Frame width in pixels (5-50) | `10` |
+| `--frame-color` | `-fc` | Frame color (name or hex code) | `black` |
+| `--style` | `-y` | QR module style: square, circle, dot, rounded | `square` |
+| `--style-size` | `-ys` | Size ratio for styled modules (0.5-1.0) | `0.8` |
 | `--no-stl` | `-N` | Skip STL generation (PNG only) | `False` |
+| `--format` | `-F` | 3D file format: stl, 3mf (geometry only) | `stl` |
 | `--save-png/--no-save-png` | `-p/-P` | Save PNG image | `True` |
 | `--display` | `-T` | Display QR code in terminal | `False` |
 | `--debug` | `-D` | Enable debug output | `False` |

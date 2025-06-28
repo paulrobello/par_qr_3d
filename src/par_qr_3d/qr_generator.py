@@ -71,6 +71,102 @@ ERROR_CORRECTION_MAP = {
 }
 
 
+def create_artistic_qr(
+    qr_code: qrcode.QRCode,
+    size: int,
+    base_color: str,
+    qr_color: str,
+    module_style: str,
+    module_size_ratio: float,
+) -> Image.Image:
+    """Create an artistic QR code with custom module shapes.
+
+    Args:
+        qr_code: The QRCode object with data
+        size: Final image size in pixels
+        base_color: Background color
+        qr_color: Module color
+        module_style: Style of modules (circle, dot, rounded)
+        module_size_ratio: Size ratio for modules
+
+    Returns:
+        PIL Image with artistic QR code
+    """
+    # Get the QR code matrix
+    matrix = qr_code.get_matrix()
+    module_count = len(matrix)
+
+    # Calculate module size
+    module_pixels = size // (module_count + qr_code.border * 2)
+    img_size = module_pixels * (module_count + qr_code.border * 2)
+
+    # Create base image
+    img = Image.new("RGB", (img_size, img_size), base_color)
+    draw = ImageDraw.Draw(img)
+
+    # Draw modules based on style
+    for row in range(module_count):
+        for col in range(module_count):
+            if matrix[row][col]:
+                # Calculate position including border
+                x = (col + qr_code.border) * module_pixels
+                y = (row + qr_code.border) * module_pixels
+
+                # Calculate module center and size
+                center_x = x + module_pixels // 2
+                center_y = y + module_pixels // 2
+                module_size = int(module_pixels * module_size_ratio)
+                half_size = module_size // 2
+
+                if module_style == "circle":
+                    # Draw filled circle
+                    draw.ellipse(
+                        [
+                            center_x - half_size,
+                            center_y - half_size,
+                            center_x + half_size,
+                            center_y + half_size,
+                        ],
+                        fill=qr_color,
+                    )
+                elif module_style == "dot":
+                    # Draw smaller filled circle (dot)
+                    dot_size = int(half_size * 0.7)  # Even smaller for dot style
+                    draw.ellipse(
+                        [
+                            center_x - dot_size,
+                            center_y - dot_size,
+                            center_x + dot_size,
+                            center_y + dot_size,
+                        ],
+                        fill=qr_color,
+                    )
+                elif module_style == "rounded":
+                    # Draw rounded square
+                    radius = int(module_size * 0.25)  # 25% corner radius
+                    x0 = center_x - half_size
+                    y0 = center_y - half_size
+                    x1 = center_x + half_size
+                    y1 = center_y + half_size
+
+                    # Use rounded rectangle if available (Pillow 8.0+)
+                    try:
+                        draw.rounded_rectangle(
+                            [(x0, y0), (x1, y1)],
+                            radius=radius,
+                            fill=qr_color,
+                        )
+                    except AttributeError:
+                        # Fallback to regular rectangle for older Pillow
+                        draw.rectangle([(x0, y0), (x1, y1)], fill=qr_color)
+
+    # Resize to final size
+    if img_size != size:
+        img = img.resize((size, size), Image.Resampling.LANCZOS)
+
+    return img
+
+
 def format_qr_data(data: str, qr_type: QRType, **kwargs: str) -> str:
     """Format data based on QR code type.
 
@@ -153,6 +249,8 @@ def generate_qr_code(
     border: int = 4,
     base_color: str = "white",
     qr_color: str = "black",
+    module_style: str = "square",
+    module_size_ratio: float = 0.8,
     **format_kwargs: str,
 ) -> Image.Image:
     """Generate a QR code image.
@@ -165,6 +263,8 @@ def generate_qr_code(
         border: Border size in modules
         base_color: Background color (name or hex code)
         qr_color: QR code module color (name or hex code)
+        module_style: Style of QR modules (square, circle, dot, rounded)
+        module_size_ratio: Size ratio for styled modules (0.5-1.0)
         **format_kwargs: Additional parameters for specific QR types
 
     Returns:
@@ -185,16 +285,19 @@ def generate_qr_code(
     qr.add_data(formatted_data)
     qr.make(fit=True)
 
-    # Create image with custom colors
-    img = qr.make_image(fill_color=qr_color, back_color=base_color)
+    # Create basic QR code image
+    if module_style == "square":
+        # Standard square modules
+        img = qr.make_image(fill_color=qr_color, back_color=base_color)
+        pil_img = cast(Image.Image, img)
+        pil_img = pil_img.resize((size, size), Image.Resampling.NEAREST)
+    else:
+        # Create artistic pattern
+        pil_img = create_artistic_qr(qr, size, base_color, qr_color, module_style, module_size_ratio)
 
-    # Cast to PIL Image for type checker
-    pil_img = cast(Image.Image, img)
-
-    # Resize to requested size
-    pil_img = pil_img.resize((size, size), Image.Resampling.NEAREST)
-
-    logger.info(f"Generated QR code: {size}x{size}px, error correction: {error_correction.value}")
+    logger.info(
+        f"Generated QR code: {size}x{size}px, style: {module_style}, error correction: {error_correction.value}"
+    )
     return pil_img
 
 
@@ -417,6 +520,125 @@ def add_overlay_to_qr(
     except Exception as e:
         logger.error(f"Failed to add overlay image: {e}")
         raise ValueError(f"Could not process overlay image: {e}")
+
+
+def add_frame_to_qr(
+    qr_image: Image.Image,
+    frame_style: str,
+    frame_width: int = 10,
+    frame_color: str = "black",
+) -> Image.Image:
+    """Add a decorative frame around a QR code.
+
+    Args:
+        qr_image: PIL Image of the QR code
+        frame_style: Style of frame (square, rounded, hexagon, octagon)
+        frame_width: Width of the frame border in pixels
+        frame_color: Color of the frame (name or hex code)
+
+    Returns:
+        New PIL Image with frame added
+
+    Note:
+        The frame is added as a border around the QR code. Different styles
+        create different shapes, with the QR code centered within. The frame
+        color can be any valid PIL color name or hex code.
+    """
+    # Convert to RGB if needed
+    if qr_image.mode != "RGB":
+        qr_image = qr_image.convert("RGB")
+
+    # Get original dimensions
+    orig_width, orig_height = qr_image.size
+
+    # Calculate new dimensions with frame
+    new_width = orig_width + (frame_width * 2)
+    new_height = orig_height + (frame_width * 2)
+
+    # Create new image with frame color background
+    framed_image = Image.new("RGB", (new_width, new_height), frame_color)
+
+    if frame_style == "square":
+        # Simple square frame - just paste QR in center
+        framed_image.paste(qr_image, (frame_width, frame_width))
+
+    elif frame_style == "rounded":
+        # Create rounded corners
+        # First paste the QR code
+        framed_image.paste(qr_image, (frame_width, frame_width))
+
+        # Create a mask for rounded corners
+        mask = Image.new("L", (new_width, new_height), 0)
+        draw = ImageDraw.Draw(mask)
+
+        # Calculate corner radius (20% of frame width)
+        corner_radius = int(frame_width * 2)
+
+        # Draw rounded rectangle on mask
+        draw.rounded_rectangle([(0, 0), (new_width - 1, new_height - 1)], radius=corner_radius, fill=255)
+
+        # Create a white background and composite
+        white_bg = Image.new("RGB", (new_width, new_height), "white")
+        framed_image = Image.composite(framed_image, white_bg, mask)
+
+    elif frame_style == "hexagon":
+        # Create hexagonal frame
+        # First paste the QR code
+        framed_image.paste(qr_image, (frame_width, frame_width))
+
+        # Create a mask for hexagon
+        mask = Image.new("L", (new_width, new_height), 0)
+        draw = ImageDraw.Draw(mask)
+
+        # Calculate hexagon points
+        cx, cy = new_width // 2, new_height // 2
+        size = min(new_width, new_height) // 2
+
+        # Hexagon has 6 points
+        points = []
+        for i in range(6):
+            angle = np.pi / 3 * i  # 60 degrees
+            x = cx + size * np.cos(angle)
+            y = cy + size * np.sin(angle)
+            points.append((x, y))
+
+        # Draw hexagon on mask
+        draw.polygon(points, fill=255)
+
+        # Create a white background and composite
+        white_bg = Image.new("RGB", (new_width, new_height), "white")
+        framed_image = Image.composite(framed_image, white_bg, mask)
+
+    elif frame_style == "octagon":
+        # Create octagonal frame
+        # First paste the QR code
+        framed_image.paste(qr_image, (frame_width, frame_width))
+
+        # Create a mask for octagon
+        mask = Image.new("L", (new_width, new_height), 0)
+        draw = ImageDraw.Draw(mask)
+
+        # Calculate octagon points
+        cx, cy = new_width // 2, new_height // 2
+        size = min(new_width, new_height) // 2
+
+        # Octagon has 8 points
+        points = []
+        for i in range(8):
+            angle = np.pi / 4 * i  # 45 degrees
+            x = cx + size * np.cos(angle)
+            y = cy + size * np.sin(angle)
+            points.append((x, y))
+
+        # Draw octagon on mask
+        draw.polygon(points, fill=255)
+
+        # Create a white background and composite
+        white_bg = Image.new("RGB", (new_width, new_height), "white")
+        framed_image = Image.composite(framed_image, white_bg, mask)
+
+    logger.info(f"Added {frame_style} frame: {frame_width}px width, {frame_color} color")
+    return framed_image
 
 
 def save_qr_code(

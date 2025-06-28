@@ -80,3 +80,4 @@ __pypackages__/
 todos.md
 *.stl
 /qr_code.png
+*.3mf
