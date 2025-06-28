@@ -265,6 +265,22 @@ def qr_command(
             help="Export 3MF with separate objects for each color (better slicer support)",
         ),
     ] = False,
+    multi_layer: Annotated[
+        bool,
+        typer.Option(
+            "--multi-layer",
+            "-ML",
+            help="Create STL with multiple distinct layer heights",
+        ),
+    ] = False,
+    layer_heights: Annotated[
+        str | None,
+        typer.Option(
+            "--layer-heights",
+            "-LH",
+            help="Comma-separated layer heights in mm (e.g., '2,4,6'). First is base, second is QR, optional third is frame/border",
+        ),
+    ] = None,
     frame_style: Annotated[
         str | None,
         typer.Option(
@@ -412,6 +428,8 @@ def qr_command(
         no_stl: If True, skip STL generation and only create PNG.
         output_format: 3D file format to use (stl or 3mf). 3MF includes color information.
         separate_components: Export 3MF with separate objects for each color (better slicer support).
+        multi_layer: If True, create STL with multiple distinct layer heights.
+        layer_heights: Comma-separated layer heights in mm. First is base, second is QR, optional third is frame.
         frame_style: Style of decorative frame (square, rounded, hexagon, octagon).
         frame_width: Width of the frame border in pixels.
         frame_color: Color of the frame (name or hex code).
@@ -518,6 +536,38 @@ def qr_command(
             qr_image = add_frame_to_qr(qr_image, frame_style.lower(), frame_width, frame_color)
             logger.debug(f"Added {frame_style} frame with width {frame_width}")
 
+        # Process multi-layer parameters
+        parsed_layer_heights = None
+        if multi_layer:
+            if layer_heights:
+                try:
+                    parsed_layer_heights = [float(h.strip()) for h in layer_heights.split(",")]
+                    if len(parsed_layer_heights) < 2:
+                        console.print(
+                            "[bold red]Error:[/bold red] --layer-heights must have at least 2 values (base, qr)"
+                        )
+                        raise typer.Exit(code=1)
+                    if len(parsed_layer_heights) > 3:
+                        console.print(
+                            "[bold red]Error:[/bold red] --layer-heights supports maximum 3 values (base, qr, frame)"
+                        )
+                        raise typer.Exit(code=1)
+                    if any(h <= 0 for h in parsed_layer_heights):
+                        console.print("[bold red]Error:[/bold red] All layer heights must be positive values")
+                        raise typer.Exit(code=1)
+                except ValueError:
+                    console.print(
+                        "[bold red]Error:[/bold red] Invalid layer heights. Use comma-separated numbers (e.g., '2,4,6')"
+                    )
+                    raise typer.Exit(code=1)
+            else:
+                # Default layer heights if not specified
+                parsed_layer_heights = [base_thickness, base_thickness + qr_depth]
+                if frame_style:
+                    parsed_layer_heights.append(base_thickness + qr_depth + 2.0)
+
+            logger.debug(f"Multi-layer mode with heights: {parsed_layer_heights}")
+
         # Display in terminal if requested
         if display:
             console.print("\n[bold]QR Code Preview:[/bold]")
@@ -582,14 +632,27 @@ def qr_command(
                 console.print(f"[green]✓[/green] Created 3MF file: {model_path}")
             else:
                 # Default to STL
-                model_path = convert_qr_to_stl(
-                    qr_image=qr_image,
-                    output_path=output.with_suffix(".stl"),
-                    base_size_mm=(base_width, base_height),
-                    base_height_mm=base_thickness,
-                    qr_height_mm=qr_depth,
-                    invert=invert,
-                )
+                if multi_layer and parsed_layer_heights:
+                    model_path = convert_qr_to_stl(
+                        qr_image=qr_image,
+                        output_path=output.with_suffix(".stl"),
+                        base_size_mm=(base_width, base_height),
+                        base_height_mm=base_thickness,
+                        qr_height_mm=qr_depth,
+                        invert=invert,
+                        multi_layer=True,
+                        layer_heights=parsed_layer_heights,
+                        has_frame=frame_style is not None,
+                    )
+                else:
+                    model_path = convert_qr_to_stl(
+                        qr_image=qr_image,
+                        output_path=output.with_suffix(".stl"),
+                        base_size_mm=(base_width, base_height),
+                        base_height_mm=base_thickness,
+                        qr_height_mm=qr_depth,
+                        invert=invert,
+                    )
                 console.print(f"[green]✓[/green] Created STL file: {model_path}")
 
         # Display summary
@@ -619,6 +682,8 @@ def qr_command(
             }
             if output_format.lower() == "3mf":
                 model_info["Colors"] = f"Base: {base_color}, QR: {qr_color}"
+            if multi_layer and parsed_layer_heights:
+                model_info["Multi-Layer"] = f"Heights: {', '.join(f'{h}mm' for h in parsed_layer_heights)}"
             summary.update(model_info)
         else:
             summary["3D Generation"] = "Disabled"

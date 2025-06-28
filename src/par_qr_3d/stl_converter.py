@@ -65,6 +65,124 @@ def image_to_3d_array(
     return height_map
 
 
+def image_to_multilayer_3d_array(
+    image: Image.Image,
+    layer_heights: list[float],
+    invert: bool = False,
+    has_frame: bool = False,
+) -> np.ndarray:
+    """Convert a QR code image to a multi-layer 3D height map array.
+
+    Args:
+        image: PIL Image of the QR code (may include frame)
+        layer_heights: List of heights [base, qr, frame] in mm
+        invert: If True, black areas are recessed and white areas are raised
+        has_frame: If True, outer border pixels are treated as frame
+
+    Returns:
+        3D numpy array representing heights with multiple distinct layers
+    """
+    # Convert to grayscale if needed
+    if image.mode != "L":
+        image = image.convert("L")
+
+    # Convert to numpy array
+    img_array = np.array(image)
+    height, width = img_array.shape
+
+    # Normalize to 0-255 range
+    img_array = img_array.astype(float)
+
+    # Create height map starting with base height
+    height_map = np.full_like(img_array, layer_heights[0], dtype=float)
+
+    if has_frame and len(layer_heights) >= 3:
+        # For frames, we need a more sophisticated approach
+        # The frame is typically added as a border around the QR code
+        # We'll detect it by looking for connected black regions from the edges
+        
+        # Normalize to 0-1 range
+        img_normalized = img_array / 255.0
+        
+        # First, identify all black pixels
+        black_mask = img_normalized < 0.5
+        
+        # Import scipy for connected component analysis
+        from scipy import ndimage
+        
+        # Create frame mask - black pixels that are connected to the image border
+        frame_mask = np.zeros_like(img_array, dtype=bool)
+        
+        # Use flood fill from edges to find frame regions
+        # Start with edge pixels
+        edge_mask = np.zeros_like(img_array, dtype=bool)
+        edge_mask[0, :] = True  # Top edge
+        edge_mask[-1, :] = True  # Bottom edge
+        edge_mask[:, 0] = True  # Left edge
+        edge_mask[:, -1] = True  # Right edge
+        
+        # Find black pixels on edges
+        edge_black = edge_mask & black_mask
+        
+        if np.any(edge_black):
+            # Label all black connected components
+            structure = np.ones((3, 3), dtype=bool)  # 8-connectivity
+            labeled, num_features = ndimage.label(black_mask, structure=structure)
+            
+            # Get labels of components touching edges
+            edge_labels = np.unique(labeled[edge_black])
+            edge_labels = edge_labels[edge_labels != 0]  # Remove background label
+            
+            # Create frame mask from edge-connected components
+            for label in edge_labels:
+                component_mask = labeled == label
+                # Check if this component forms a frame-like structure
+                # (touches multiple edges and forms a border)
+                touches_top = np.any(component_mask[0, :])
+                touches_bottom = np.any(component_mask[-1, :])
+                touches_left = np.any(component_mask[:, 0])
+                touches_right = np.any(component_mask[:, -1])
+                
+                # A frame should touch at least 3 edges or form a continuous border
+                edge_count = touches_top + touches_bottom + touches_left + touches_right
+                if edge_count >= 3:
+                    # Additional check: frame components should be relatively large
+                    component_size = np.sum(component_mask)
+                    total_black = np.sum(black_mask)
+                    # Frame should be at least 10% of black pixels
+                    if component_size > 0.1 * total_black:
+                        frame_mask |= component_mask
+        
+        # Apply heights based on the masks
+        # Frame gets the highest layer
+        height_map[frame_mask] = layer_heights[2]
+        
+        # QR modules (black pixels not in frame) get middle layer
+        qr_mask = black_mask & ~frame_mask
+        height_map[qr_mask] = layer_heights[1]
+        
+        # White areas stay at base height (already set)
+        
+        # Handle inverted case
+        if invert:
+            # Swap QR and base heights
+            white_mask = ~black_mask
+            height_map[white_mask & ~frame_mask] = layer_heights[1]
+            height_map[qr_mask] = layer_heights[0]
+        
+    else:
+        # No frame, process entire image as QR code
+        img_normalized = img_array / 255.0
+
+        if invert:
+            img_normalized = 1.0 - img_normalized
+
+        # Black pixels (0) get QR height, white pixels stay at base
+        height_map = np.where(img_normalized < 0.5, layer_heights[1], layer_heights[0])
+
+    return height_map
+
+
 def create_stl_from_heightmap(
     height_map: np.ndarray,
     pixel_size: float = 1.0,
@@ -250,6 +368,9 @@ def convert_qr_to_stl(
     base_height_mm: float = 2.0,
     qr_height_mm: float = 2.0,
     invert: bool = False,
+    multi_layer: bool = False,
+    layer_heights: list[float] | None = None,
+    has_frame: bool = False,
 ) -> Path:
     """Convert a QR code image to an STL file.
 
@@ -260,6 +381,9 @@ def convert_qr_to_stl(
         base_height_mm: Height of the base layer in mm
         qr_height_mm: Additional height for QR code modules in mm
         invert: If True, white areas are raised instead of black
+        multi_layer: If True, create multiple distinct layer heights
+        layer_heights: List of layer heights [base, qr, frame] in mm
+        has_frame: If True, indicates the image has a frame to be rendered at a different height
 
     Returns:
         Path to the saved STL file
@@ -272,12 +396,24 @@ def convert_qr_to_stl(
         output_path = output_path.with_suffix(".stl")
 
     # Convert image to height map
-    height_map = image_to_3d_array(
-        qr_image,
-        base_height=base_height_mm,
-        qr_height=qr_height_mm,
-        invert=invert,
-    )
+    if multi_layer and layer_heights:
+        height_map = image_to_multilayer_3d_array(
+            qr_image,
+            layer_heights=layer_heights,
+            invert=invert,
+            has_frame=has_frame,
+        )
+        # Update base_height_mm and qr_height_mm for logging
+        base_height_mm = layer_heights[0]
+        if len(layer_heights) >= 2:
+            qr_height_mm = layer_heights[1] - layer_heights[0]
+    else:
+        height_map = image_to_3d_array(
+            qr_image,
+            base_height=base_height_mm,
+            qr_height=qr_height_mm,
+            invert=invert,
+        )
 
     # Flip the height map vertically to correct the orientation
     # This ensures labels at the top of the image appear at the top of the STL
@@ -299,9 +435,16 @@ def convert_qr_to_stl(
     # Save STL file
     stl_mesh.save(str(output_path))
 
-    total_height = base_height_mm + qr_height_mm
+    if multi_layer and layer_heights:
+        total_height = max(layer_heights)
+    else:
+        total_height = base_height_mm + qr_height_mm
+
     logger.info(f"Saved STL file to: {output_path}")
     logger.info(f"Model dimensions: {base_size_mm[0]:.1f} x {base_size_mm[1]:.1f} x {total_height:.1f} mm")
+
+    if multi_layer and layer_heights:
+        logger.info(f"Multi-layer heights: {', '.join(f'{h:.1f}mm' for h in layer_heights)}")
 
     return output_path
 

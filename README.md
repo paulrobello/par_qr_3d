@@ -9,6 +9,7 @@ CLI tool to generate 3D printable STL files from QR codes. Create QR codes with 
 - **Multiple QR Code Types**: Generate QR codes for text, URLs, emails, phone numbers, SMS, WiFi credentials, and contact cards
 - **3D Model Generation**: Convert QR codes into 3D printable STL files with customizable dimensions
 - **3MF Format Support**: Export to 3MF format with full color support for multi-material 3D printing
+- **Multi-Layer Heights**: Create STL files with multiple distinct layer heights for visual depth and interest
 - **Configurable Parameters**: Adjust QR code size, error correction level, base dimensions, and QR pattern depth
 - **Custom Colors**: Set custom colors for QR code modules and background using color names or hex codes
 - **Text Labels**: Add custom text labels to QR codes with configurable positioning (top/bottom)
@@ -380,6 +381,38 @@ par_qr_3d qr "Quick 3MF" -F 3mf
 - Uses lib3mf for proper material and color handling
 - Option to export as separate components for improved slicer compatibility
 
+#### Multi-Layer STL Generation
+Create STL files with multiple distinct layer heights for more visually interesting 3D prints:
+```bash
+# Basic multi-layer with automatic heights
+par_qr_3d qr "Multi-Layer QR" --multi-layer
+
+# Custom layer heights (base, QR modules, frame)
+par_qr_3d qr "Custom Layers" --multi-layer --layer-heights "2,4,6"
+
+# Multi-layer with frame (3 distinct heights)
+par_qr_3d qr "Layered Frame" --multi-layer \
+  --frame hexagon \
+  --frame-width 25
+
+# Custom heights with rounded frame
+par_qr_3d qr "Premium Layered" --multi-layer \
+  --layer-heights "1,3,5" \
+  --frame rounded \
+  --frame-width 30 \
+  --frame-color gold
+
+# Short options
+par_qr_3d qr "Quick Layers" -ML -LH "2,5,8"
+```
+
+Multi-layer features:
+- **Automatic Heights**: If --layer-heights not specified, uses sensible defaults
+- **Base Layer**: Always at the specified height (default 2mm)
+- **QR Layer**: Raised modules at second height
+- **Frame Layer**: Optional third height for frames (when --frame is used)
+- **Visual Depth**: Creates more interesting 3D models with distinct layer separation
+
 #### PNG-Only Mode
 Skip STL generation and only create PNG images:
 ```bash
@@ -540,6 +573,22 @@ par_qr_3d qr "https://colorful.example.com" \
   --base-height 80
 ```
 
+#### Multi-Layer 3D Model
+```bash
+par_qr_3d qr "https://layered.example.com" \
+  --type url \
+  --multi-layer \
+  --layer-heights "2,5,8" \
+  --frame hexagon \
+  --frame-width 30 \
+  --frame-color gold \
+  --label "PREMIUM ACCESS" \
+  --output layered_qr \
+  --size 300 \
+  --base-width 100 \
+  --base-height 100
+```
+
 ## Output Files
 
 The tool generates two files by default:
@@ -606,6 +655,8 @@ The 3D model includes:
 | `--no-stl` | `-N` | Skip STL generation (PNG only) | `False` |
 | `--format` | `-F` | 3D file format: stl, 3mf (3mf includes colors) | `stl` |
 | `--separate-components` | `-SC` | Export 3MF with separate objects for each color | `False` |
+| `--multi-layer` | `-ML` | Create STL with multiple distinct layer heights | `False` |
+| `--layer-heights` | `-LH` | Comma-separated layer heights in mm | `None` |
 | `--save-png/--no-save-png` | `-p/-P` | Save PNG image | `True` |
 | `--display` | `-T` | Display QR code in terminal | `False` |
 | `--debug` | `-D` | Enable debug output | `False` |
