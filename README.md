@@ -23,6 +23,7 @@ CLI tool to generate 3D printable STL and 3MF files from QR codes. Create QR cod
 - **Inverted Mode**: Create inverted QR codes with recessed black areas
 - **PNG-Only Mode**: Option to generate only PNG images without STL files
 - **PNG Export**: Optionally save QR codes as PNG images alongside STL files
+- **SVG Export**: Export QR codes as scalable vector graphics (SVG) files
 - **Auto-Open Files**: Option to automatically open generated files in default applications
 - **Rich Terminal UI**: Beautiful output with progress indicators and formatted results
 - **Type Safety**: Full type annotations throughout the codebase
@@ -521,6 +522,42 @@ This is useful for:
 - Faster processing when STL is not needed
 - Creating QR codes for digital use only
 
+#### SVG Export
+Export QR codes as scalable vector graphics:
+```bash
+# Basic SVG export (also creates PNG)
+par_qr_3d qr "SVG Export" --save-svg
+
+# SVG only without PNG or STL
+par_qr_3d qr "SVG Only" --save-svg --no-save-png --no-stl
+
+# SVG with custom colors and styles
+par_qr_3d qr "Styled SVG" --save-svg \
+  --style circle \
+  --base-color "#f0f0f0" \
+  --qr-color "#0066cc" \
+  --module-size 0.8
+
+# Combine with other features
+par_qr_3d qr "https://example.com" --save-svg \
+  --type url \
+  --style rounded \
+  --frame hexagon \
+  --frame-color gold
+
+# Short option
+par_qr_3d qr "Quick SVG" -v
+```
+
+SVG features:
+- **Scalable**: Vector format scales to any size without quality loss
+- **Web-Ready**: Perfect for websites and digital applications
+- **Small Files**: Efficient file size for simple QR codes
+- **Style Support**: Preserves artistic module styles (circle, dot, rounded)
+- **Color Preservation**: Full color support for base and module colors
+
+Note: SVG export creates a separate file alongside PNG/STL. Labels, overlays, and frames are only included in the PNG version.
+
 #### Open in Default Application
 Automatically open the generated file after creation:
 ```bash
@@ -838,6 +875,7 @@ The tool uses different geometry generation approaches for each output format to
 | `--mount` | `-m` | Add mounting feature: keychain, holes | `None` |
 | `--hole-diameter` | `-hd` | Diameter of mounting holes in mm (1-10) | `4.0` |
 | `--save-png/--no-save-png` | `-p/-P` | Save PNG image | `True` |
+| `--save-svg/--no-save-svg` | `-v/-V` | Save SVG file | `False` |
 | `--display` | `-T` | Display QR code in terminal | `False` |
 | `--open` | `-X` | Open generated file in default application | `False` |
 | `--debug` | `-D` | Enable debug output | `False` |

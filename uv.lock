@@ -384,10 +384,10 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "build", specifier = ">=1.2.2" },
-    { name = "pre-commit", specifier = ">=4.1.0" },
-    { name = "pyinstrument", specifier = ">=5.0.1" },
-    { name = "pyright", specifier = ">=1.1.396" },
-    { name = "ruff", specifier = ">=0.11.0" },
+    { name = "pre-commit", specifier = ">=4.2.0" },
+    { name = "pyinstrument", specifier = ">=5.0.2" },
+    { name = "pyright", specifier = ">=1.1.402" },
+    { name = "ruff", specifier = ">=0.12.1" },
     { name = "scalene", specifier = ">=1.5.51" },
 ]
 

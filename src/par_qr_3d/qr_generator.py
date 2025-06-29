@@ -252,8 +252,9 @@ def generate_qr_code(
     qr_color: str = "black",
     module_style: str = "square",
     module_size_ratio: float = 0.8,
+    return_qr_object: bool = False,
     **format_kwargs: str,
-) -> Image.Image:
+) -> Image.Image | tuple[Image.Image, qrcode.QRCode]:
     """Generate a QR code image.
 
     Args:
@@ -266,10 +267,11 @@ def generate_qr_code(
         qr_color: QR code module color (name or hex code)
         module_style: Style of QR modules (square, circle, dot, rounded)
         module_size_ratio: Size ratio for styled modules (0.5-1.0)
+        return_qr_object: If True, also return the QRCode object
         **format_kwargs: Additional parameters for specific QR types
 
     Returns:
-        PIL Image object containing the QR code
+        PIL Image object containing the QR code, or tuple of (image, qr_object) if return_qr_object is True
     """
     # Format data based on type
     formatted_data = format_qr_data(data, qr_type, **format_kwargs)
@@ -299,6 +301,9 @@ def generate_qr_code(
     logger.info(
         f"Generated QR code: {size}x{size}px, style: {module_style}, error correction: {error_correction.value}"
     )
+
+    if return_qr_object:
+        return pil_img, qr
     return pil_img
 
 
@@ -729,4 +734,108 @@ def save_qr_code(
     image.save(output_path, "PNG")
     logger.info(f"Saved QR code image to: {output_path}")
 
+    return output_path
+
+
+def generate_qr_svg(
+    qr_code: qrcode.QRCode,
+    base_color: str = "white",
+    qr_color: str = "black",
+    module_style: str = "square",
+    module_size_ratio: float = 0.8,
+) -> str:
+    """Generate SVG string from QR code.
+
+    Args:
+        qr_code: The QRCode object with data
+        base_color: Background color
+        qr_color: Module color
+        module_style: Style of modules (square, circle, dot, rounded)
+        module_size_ratio: Size ratio for modules
+
+    Returns:
+        SVG string representation of the QR code
+    """
+    # Get the QR code matrix
+    matrix = qr_code.get_matrix()
+    module_count = len(matrix)
+
+    # Calculate SVG dimensions
+    border = qr_code.border
+    svg_size = (module_count + 2 * border) * 10  # 10 units per module
+
+    # Start SVG
+    svg_parts = [
+        f'<svg width="{svg_size}" height="{svg_size}" version="1.1" xmlns="http://www.w3.org/2000/svg">',
+        f'<rect width="{svg_size}" height="{svg_size}" fill="{base_color}"/>',
+    ]
+
+    # Draw modules
+    module_size = 10
+    adjusted_size = module_size * module_size_ratio
+    offset = (module_size - adjusted_size) / 2
+
+    for row_idx, row in enumerate(matrix):
+        for col_idx, module in enumerate(row):
+            if module:
+                x = (col_idx + border) * module_size
+                y = (row_idx + border) * module_size
+
+                if module_style == "square":
+                    svg_parts.append(
+                        f'<rect x="{x}" y="{y}" width="{module_size}" height="{module_size}" fill="{qr_color}"/>'
+                    )
+                elif module_style == "circle":
+                    cx = x + module_size / 2
+                    cy = y + module_size / 2
+                    r = adjusted_size / 2
+                    svg_parts.append(f'<circle cx="{cx}" cy="{cy}" r="{r}" fill="{qr_color}"/>')
+                elif module_style == "dot":
+                    cx = x + module_size / 2
+                    cy = y + module_size / 2
+                    r = adjusted_size / 2
+                    svg_parts.append(f'<circle cx="{cx}" cy="{cy}" r="{r}" fill="{qr_color}"/>')
+                elif module_style == "rounded":
+                    rx = adjusted_size * 0.2
+                    svg_parts.append(
+                        f'<rect x="{x + offset}" y="{y + offset}" width="{adjusted_size}" '
+                        f'height="{adjusted_size}" rx="{rx}" fill="{qr_color}"/>'
+                    )
+
+    svg_parts.append("</svg>")
+    return "\n".join(svg_parts)
+
+
+def save_qr_svg(
+    qr_code: qrcode.QRCode,
+    output_path: Path | str,
+    base_color: str = "white",
+    qr_color: str = "black",
+    module_style: str = "square",
+    module_size_ratio: float = 0.8,
+) -> Path:
+    """Save QR code as SVG file.
+
+    Args:
+        qr_code: The QRCode object with data
+        output_path: Path to save the SVG
+        base_color: Background color
+        qr_color: Module color
+        module_style: Style of modules
+        module_size_ratio: Size ratio for modules
+
+    Returns:
+        Path to the saved SVG file
+    """
+    # Prepare output path with .svg extension
+    output_path = prepare_output_path(output_path, ".svg")
+
+    # Generate SVG
+    svg_content = generate_qr_svg(qr_code, base_color, qr_color, module_style, module_size_ratio)
+
+    # Save to file
+    with open(output_path, "w", encoding="utf-8") as f:
+        f.write(svg_content)
+
+    logger.info(f"Saved QR code SVG to: {output_path}")
     return output_path

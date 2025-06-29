@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, cast
 
+import qrcode
 import typer
 from dotenv import load_dotenv
+from PIL import Image
 from rich.console import Console
 from rich.pretty import Pretty
 from rich_pixels import Pixels
@@ -21,6 +23,7 @@ from .qr_generator import (
     crop_qr_border,
     generate_qr_code,
     save_qr_code,
+    save_qr_svg,
 )
 from .stl_converter import convert_qr_to_3mf, convert_qr_to_stl
 from .utils import open_file_in_default_app, validate_choice, validate_conflict
@@ -179,6 +182,14 @@ def qr_command(
             help="Save the QR code as a PNG image",
         ),
     ] = True,
+    save_svg: Annotated[
+        bool,
+        typer.Option(
+            "--save-svg/--no-save-svg",
+            "-v/-V",
+            help="Save the QR code as an SVG file",
+        ),
+    ] = False,
     display: Annotated[
         bool,
         typer.Option(
@@ -496,6 +507,7 @@ def qr_command(
         invert: If True, black areas are recessed and white areas are raised.
         border_crop: Pixels to crop from QR code border (0 to disable).
         save_png: If True, also save the QR code as a PNG image.
+        save_svg: If True, also save the QR code as an SVG file.
         display: If True, display the QR code in the terminal.
         label: Optional text label to add to the QR code.
         label_position: Position of the label (top or bottom).
@@ -573,17 +585,40 @@ def qr_command(
 
         # Generate QR code
         console.print("[blue]Generating QR code...[/blue]")
-        qr_image = generate_qr_code(
-            data=data,
-            qr_type=qr_type,
-            size=size,
-            error_correction=error_correction,
-            base_color=base_color,
-            qr_color=qr_color,
-            module_style=module_style,
-            module_size_ratio=module_size_ratio,
-            **format_kwargs,
-        )
+
+        # Get both image and QR object if SVG is requested
+        qr_object: qrcode.QRCode | None = None
+        qr_image: Image.Image
+
+        if save_svg:
+            result = generate_qr_code(
+                data=data,
+                qr_type=qr_type,
+                size=size,
+                error_correction=error_correction,
+                base_color=base_color,
+                qr_color=qr_color,
+                module_style=module_style,
+                module_size_ratio=module_size_ratio,
+                return_qr_object=True,
+                **format_kwargs,
+            )
+            qr_image, qr_object = cast(tuple[Image.Image, qrcode.QRCode], result)
+        else:
+            qr_image = cast(
+                Image.Image,
+                generate_qr_code(
+                    data=data,
+                    qr_type=qr_type,
+                    size=size,
+                    error_correction=error_correction,
+                    base_color=base_color,
+                    qr_color=qr_color,
+                    module_style=module_style,
+                    module_size_ratio=module_size_ratio,
+                    **format_kwargs,
+                ),
+            )
 
         # Crop border if requested
         if border_crop > 0:
@@ -708,6 +743,18 @@ def qr_command(
             png_path = save_qr_code(qr_image, output.with_suffix(".png"))
             console.print(f"[green]✓[/green] Saved QR code image: {png_path}")
 
+        # Save SVG if requested
+        if save_svg and qr_object is not None:
+            svg_path = save_qr_svg(
+                qr_object,
+                output.with_suffix(".svg"),
+                base_color=base_color,
+                qr_color=qr_color,
+                module_style=module_style,
+                module_size_ratio=module_size_ratio,
+            )
+            console.print(f"[green]✓[/green] Saved QR code SVG: {svg_path}")
+
         # Convert to 3D format if not disabled
         if not no_stl:
             console.print(f"[blue]Converting to 3D model ({output_format.upper()})...[/blue]")
@@ -817,6 +864,9 @@ def qr_command(
             elif save_png:
                 # If no 3D file was generated, open the PNG
                 file_to_open = output.with_suffix(".png")
+            elif save_svg:
+                # If no 3D or PNG file was generated, open the SVG
+                file_to_open = output.with_suffix(".svg")
 
             if file_to_open:
                 success = open_file_in_default_app(file_to_open)
