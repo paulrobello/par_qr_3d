@@ -101,7 +101,7 @@ The project has a complete implementation for generating 3D printable files from
 - **Shared Utilities**: Centralized utilities eliminate code duplication (~440+ lines saved)
 - **Shared Geometry**: Common functions generate vertices/triangles for both STL and 3MF
 - **Component Tracking**: Geometry tagged by component type (base, QR, walls) for material assignment
-- **Smart Triangulation**: Fan-pattern triangulation for proper hole geometry in mounts
+- **Smart Triangulation**: Ring-pattern triangulation for proper hole geometry in keychain mounts
 - **Format Optimization**: STL includes walls for printing, 3MF optimized for visual rendering
 - **Cross-Platform**: Font loading and file opening work on macOS, Linux, and Windows
 - **Bundled Fonts**: Includes NotoEmoji-Regular.ttf for emoji, DejaVuSans.ttf for Unicode, Roboto-Black.ttf for labels

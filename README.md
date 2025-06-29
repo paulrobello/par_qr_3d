@@ -488,12 +488,13 @@ par_qr_3d qr "Quick Mount" -m keychain -hd 3.5
 Mounting features:
 - **Keychain Loop**: Adds a tab with hole at the top of the QR code
 - **Hole Diameter**: Customizable from 1-10mm (default 4mm)
-- **Strong Design**: Tab thickness matches base for durability
+- **Optimized Design**: Tab uses 2mm thickness for durability and practicality
 - **Centered Position**: Loop is centered for balanced hanging
-- **Proper Triangulation**: Uses fan-pattern triangulation for clean hole geometry
-- **3D Printer Ready**: Hole walls properly oriented for slicer recognition
+- **Proper Geometry**: Complete box structure with all faces properly defined
+- **3D Printer Ready**: Hole walls correctly oriented with outward-facing normals
+- **Format Support**: Works correctly in both STL and 3MF formats
 
-Note: The keychain mount uses advanced triangulation to ensure the hole is properly recognized by 3D printing slicers as a void rather than solid geometry.
+Note: The keychain mount creates a complete box structure extending from the QR base with proper hole geometry that renders correctly in all 3D slicers.
 
 #### PNG-Only Mode
 Skip STL generation and only create PNG images:
