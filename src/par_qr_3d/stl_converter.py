@@ -793,6 +793,7 @@ def generate_keychain_mount_geometry(
     hole_diameter: float = 4.0,
     tab_width: float = 15.0,
     tab_height: float = 10.0,
+    tab_thickness: float = 2.0,
 ) -> tuple[list[list[float]], list[tuple[int, int, int]]]:
     """Generate vertex and triangle data for a keychain mounting tab.
 
@@ -803,6 +804,7 @@ def generate_keychain_mount_geometry(
         hole_diameter: Diameter of the keychain hole in mm
         tab_width: Width of the mounting tab in mm
         tab_height: Height of the mounting tab in mm
+        tab_thickness: Thickness of the tab in mm
 
     Returns:
         Tuple of (vertices, triangles) where:
@@ -812,9 +814,9 @@ def generate_keychain_mount_geometry(
     # Position tab at the top center of the QR code
     tab_x_start = (base_width - tab_width) / 2
     tab_x_end = tab_x_start + tab_width
-    tab_y_start = base_depth
-    tab_y_end = base_depth + tab_height
-    tab_thickness = base_height
+    tab_y_start = base_depth  # Tab starts at the base edge
+    tab_y_end = base_depth + tab_height  # Tab extends beyond the base
+    # Use the provided tab thickness instead of base height
 
     # Hole center
     hole_center_x = base_width / 2
@@ -930,7 +932,7 @@ def generate_keychain_mount_geometry(
     triangles.append((1, 2, 5))
     triangles.append((2, 6, 5))
 
-    # HOLE WALLS
+    # HOLE WALLS - normals should point inward (into the hole)
     for i in range(num_sides):
         next_i = (i + 1) % num_sides
         top_i = hole_vertices_top_start + i
@@ -938,9 +940,9 @@ def generate_keychain_mount_geometry(
         bottom_i = hole_vertices_bottom_start + i
         bottom_next = hole_vertices_bottom_start + next_i
 
-        # Two triangles per wall segment
-        triangles.append((top_i, top_next, bottom_i))
-        triangles.append((bottom_i, top_next, bottom_next))
+        # Two triangles per wall segment with correct winding for inward normals
+        triangles.append((top_i, bottom_i, top_next))
+        triangles.append((top_next, bottom_i, bottom_next))
 
     return vertices, triangles
 
@@ -970,9 +972,9 @@ def add_keychain_mount(
     Returns:
         Updated face index after adding mount faces
     """
-    # Generate the geometry
+    # Generate the geometry with a thinner tab (2mm thickness)
     vertices, triangles = generate_keychain_mount_geometry(
-        base_width, base_depth, base_height, hole_diameter, tab_width, tab_height
+        base_width, base_depth, base_height, hole_diameter, tab_width, tab_height, tab_thickness=2.0
     )
 
     # Add triangles to STL mesh
@@ -1011,9 +1013,9 @@ def add_keychain_mount_3mf(
         tab_width: Width of the mounting tab in mm
         tab_height: Height of the mounting tab in mm
     """
-    # Generate the shared geometry
+    # Generate the shared geometry with a thinner tab (2mm thickness)
     vertices, triangles = generate_keychain_mount_geometry(
-        base_width, base_depth, base_height, hole_diameter, tab_width, tab_height
+        base_width, base_depth, base_height, hole_diameter, tab_width, tab_height, tab_thickness=2.0
     )
 
     # Add vertices to 3MF mesh and store their indices
