@@ -2,7 +2,7 @@
 
 ## Description
 
-CLI tool to generate 3D printable STL files from QR codes. Create QR codes with various data types (URLs, WiFi credentials, contact info, etc.) and convert them into 3D models suitable for 3D printing. The generated STL files can be customized with different sizes, heights, and error correction levels.
+CLI tool to generate 3D printable STL and 3MF files from QR codes. Create QR codes with various data types (URLs, WiFi credentials, contact info, etc.) and convert them into 3D models suitable for 3D printing. The generated files can be customized with different sizes, heights, colors, mounting options, and artistic styles.
 
 ## Features
 
@@ -10,9 +10,11 @@ CLI tool to generate 3D printable STL files from QR codes. Create QR codes with 
 - **3D Model Generation**: Convert QR codes into 3D printable STL files with customizable dimensions
 - **3MF Format Support**: Export to 3MF format with full color support for multi-material 3D printing
 - **Multi-Layer Heights**: Create STL files with multiple distinct layer heights for visual depth and interest
+- **Mounting Features**: Add keychain loops or screw holes for practical applications
 - **Configurable Parameters**: Adjust QR code size, error correction level, base dimensions, and QR pattern depth
 - **Custom Colors**: Set custom colors for QR code modules and background using color names or hex codes
 - **Text Labels**: Add custom text labels to QR codes with configurable positioning (top/bottom)
+- **Center Text/Emoji**: Display text or emoji in the center of QR codes with customizable colors and size
 - **Image Overlays**: Add logo or image overlays to the center of QR codes (grayscale for STL, full color for PNG-only)
 - **Decorative Frames**: Add stylish frames around QR codes (square, rounded, hexagon, octagon)
 - **Artistic Patterns**: Replace standard squares with circles, dots, or rounded modules
@@ -21,6 +23,7 @@ CLI tool to generate 3D printable STL files from QR codes. Create QR codes with 
 - **Inverted Mode**: Create inverted QR codes with recessed black areas
 - **PNG-Only Mode**: Option to generate only PNG images without STL files
 - **PNG Export**: Optionally save QR codes as PNG images alongside STL files
+- **Auto-Open Files**: Option to automatically open generated files in default applications
 - **Rich Terminal UI**: Beautiful output with progress indicators and formatted results
 - **Type Safety**: Full type annotations throughout the codebase
 - **Modern Python**: Built with modern tooling including uv, ruff, and pyright
@@ -37,6 +40,8 @@ CLI tool to generate 3D printable STL files from QR codes. Create QR codes with 
 - **rich-pixels** - Terminal-based image display
 - **qrcode** - QR code generation with PIL support
 - **numpy-stl** - STL file creation and manipulation
+- **lib3mf** - 3MF file format support with color materials
+- **scipy** - Advanced image processing for frame detection
 - **Pillow** - Image processing for QR codes
 - **uv** - Fast Python package management
 
@@ -183,6 +188,41 @@ par_qr_3d qr "Data" --label "My Label" --label-threshold 192
 par_qr_3d qr "Data" --label "My Label" -k 128
 ```
 
+#### Center Text and Emoji
+Add text or emoji to the center of your QR code:
+```bash
+# Add simple text
+par_qr_3d qr "https://example.com" --center-text "SCAN"
+
+# Add emoji with larger font
+par_qr_3d qr "Email me" --center-text "📧" --text-size 36
+
+# Custom colors (preserved in PNG, grayscale in STL)
+par_qr_3d qr "Contact" --center-text "CALL" --text-color white --text-bg red
+
+# Larger text area
+par_qr_3d qr "Website" --center-text "WWW" --text-area 25
+
+# Combine with other features
+par_qr_3d qr "Premium Access" \
+  --center-text "VIP" \
+  --text-color gold \
+  --text-bg black \
+  --frame hexagon \
+  --frame-color gold
+
+# Short options
+par_qr_3d qr "Quick" -ct "GO" -ts 30 -tc blue -tb yellow
+```
+
+Center text features:
+- Supports Unicode text and emoji with bundled fonts
+- Automatic font size adjustment to fit text area
+- Custom text and background colors
+- Adjustable text area size (10-30% of QR code)
+- Includes bundled fonts for consistent emoji rendering
+- Cannot be used with --overlay-image (mutually exclusive)
+
 #### Image Overlays
 Add a logo or image overlay to the center of your QR code:
 ```bash
@@ -206,6 +246,7 @@ The overlay image is:
 - Sized as a percentage of the QR code (10-30%, default 20%)
 - Supports common image formats (PNG, JPG, etc.)
 - Properly handles transparency if present
+- Cannot be used with --center-text (mutually exclusive)
 
 #### Custom Colors
 Customize the colors of your QR code using color names or hex codes:
@@ -412,6 +453,47 @@ Multi-layer features:
 - **QR Layer**: Raised modules at second height
 - **Frame Layer**: Optional third height for frames (when --frame is used)
 - **Visual Depth**: Creates more interesting 3D models with distinct layer separation
+- **Smart Frame Detection**: Uses connected component analysis to properly detect and render frame borders at the correct height
+- **Accurate Layering**: Frame detection algorithm identifies border-connected black regions to ensure proper 3D rendering
+
+#### Mounting Features
+Add practical mounting options to your QR codes for keychains, badges, or wall mounting:
+```bash
+# Add keychain loop with default 4mm hole
+par_qr_3d qr "Contact Info" --mount keychain
+
+# Custom hole diameter for larger keyrings
+par_qr_3d qr "WiFi Password" --mount keychain --hole-diameter 6
+
+# Combine with other features
+par_qr_3d qr "Company Contact" \
+  --mount keychain \
+  --hole-diameter 5 \
+  --frame rounded \
+  --label "SCAN ME" \
+  --base-width 40 \
+  --base-height 40
+
+# Works with multi-layer
+par_qr_3d qr "Premium Tag" \
+  --mount keychain \
+  --multi-layer \
+  --layer-heights "2,4,6" \
+  --style circle
+
+# Short options
+par_qr_3d qr "Quick Mount" -m keychain -hd 3.5
+```
+
+Mounting features:
+- **Keychain Loop**: Adds a tab with hole at the top of the QR code
+- **Hole Diameter**: Customizable from 1-10mm (default 4mm)
+- **Strong Design**: Tab thickness matches base for durability
+- **Centered Position**: Loop is centered for balanced hanging
+- **Proper Triangulation**: Uses fan-pattern triangulation for clean hole geometry
+- **3D Printer Ready**: Hole walls properly oriented for slicer recognition
+
+Note: The keychain mount uses advanced triangulation to ensure the hole is properly recognized by 3D printing slicers as a void rather than solid geometry.
 
 #### PNG-Only Mode
 Skip STL generation and only create PNG images:
@@ -437,6 +519,19 @@ This is useful for:
 - Preserving full color in overlays
 - Faster processing when STL is not needed
 - Creating QR codes for digital use only
+
+#### Open in Default Application
+Automatically open the generated file after creation:
+```bash
+# Open STL in default 3D viewer
+par_qr_3d qr "View me" --open
+
+# Open 3MF in default viewer with colors
+par_qr_3d qr "Colorful" --format 3mf --base-color coral --qr-color navy --open
+
+# Open PNG when skipping 3D generation
+par_qr_3d qr "PNG only" --no-stl --open
+```
 
 #### Debug Mode
 Enable verbose output for troubleshooting:
@@ -536,6 +631,22 @@ par_qr_3d qr "https://premium.example.com" \
   --qr-depth 5
 ```
 
+#### QR Code with Center Text
+```bash
+par_qr_3d qr "https://menu.restaurant.com" \
+  --type url \
+  --center-text "🍽️" \
+  --text-size 48 \
+  --text-area 25 \
+  --text-bg "#f0f0f0" \
+  --frame rounded \
+  --frame-width 20 \
+  --label "SCAN FOR MENU" \
+  --output restaurant_qr \
+  --size 300 \
+  --error-correction H
+```
+
 #### Artistic Business Card QR
 ```bash
 par_qr_3d qr "John Smith" \
@@ -589,6 +700,24 @@ par_qr_3d qr "https://layered.example.com" \
   --base-height 100
 ```
 
+#### Keychain QR Code
+```bash
+par_qr_3d qr "John Smith" \
+  --type contact \
+  --contact-phone "+1-555-0123" \
+  --contact-email "john@example.com" \
+  --mount keychain \
+  --hole-diameter 5 \
+  --frame rounded \
+  --frame-width 10 \
+  --label "CONTACT" \
+  --output keychain_contact \
+  --size 200 \
+  --base-width 35 \
+  --base-height 35 \
+  --base-thickness 3
+```
+
 ## Output Files
 
 The tool generates two files by default:
@@ -604,6 +733,9 @@ The 3D model includes:
 - White areas remain at base height
 - Properly closed mesh suitable for 3D printing
 - Color materials embedded in 3MF files for multi-material printing
+- Optional mounting features (keychain loops)
+- Multi-layer support for distinct height levels
+- Internal walls for proper 3D printing (STL format)
 
 ## 3D Printing Tips
 
@@ -645,6 +777,11 @@ The 3D model includes:
 | `--label-threshold` | `-k` | Threshold for label text binarization (0-255) | `128` |
 | `--overlay-image` | `-I` | Path to image to overlay in center of QR code | `None` |
 | `--overlay-size` | `-Z` | Size of overlay as percentage of QR code (10-30) | `20` |
+| `--center-text` | `-ct` | Text or emoji to display in center of QR code | `None` |
+| `--text-size` | `-ts` | Font size for center text in pixels (8-100) | `24` |
+| `--text-area` | `-ta` | Size of text area as percentage of QR code (10-30) | `20` |
+| `--text-color` | `-tc` | Center text color (name or hex code) | `black` |
+| `--text-bg` | `-tb` | Background color for center text (name or hex code) | `white` |
 | `--base-color` | `-bc` | Background color (name or hex code) | `white` |
 | `--qr-color` | `-qc` | QR module color (name or hex code) | `black` |
 | `--frame` | `-f` | Frame style: square, rounded, hexagon, octagon | `None` |
@@ -657,8 +794,11 @@ The 3D model includes:
 | `--separate-components` | `-SC` | Export 3MF with separate objects for each color | `False` |
 | `--multi-layer` | `-ML` | Create STL with multiple distinct layer heights | `False` |
 | `--layer-heights` | `-LH` | Comma-separated layer heights in mm | `None` |
+| `--mount` | `-m` | Add mounting feature: keychain, holes | `None` |
+| `--hole-diameter` | `-hd` | Diameter of mounting holes in mm (1-10) | `4.0` |
 | `--save-png/--no-save-png` | `-p/-P` | Save PNG image | `True` |
 | `--display` | `-T` | Display QR code in terminal | `False` |
+| `--open` | `-X` | Open generated file in default application | `False` |
 | `--debug` | `-D` | Enable debug output | `False` |
 
 ### Type-Specific Options
@@ -704,6 +844,74 @@ make format     # Format with ruff
 make lint       # Lint with ruff
 make typecheck  # Type check with pyright
 ```
+
+### Architecture
+
+The codebase follows a clean, modular architecture with shared utilities and geometry generation:
+
+#### Core Modules
+- **`qr_generator.py`**: QR code generation with support for various data types, styles, frames, and overlays
+- **`stl_converter.py`**: 3D model generation for both STL and 3MF formats
+- **`__main__.py`**: CLI interface using Typer with comprehensive options
+
+#### Shared Utilities (`utils/`)
+The project uses a utilities package to eliminate code duplication and ensure consistency:
+
+- **`color_utils.py`**: Color handling and conversion
+  - `parse_color()` - Parse color names/hex with fallback
+  - `normalize_rgb()` - Convert RGB to 0-1 range
+  - `color_to_3mf_format()` - Convert colors for 3MF format
+
+- **`font_utils.py`**: Font loading and emoji support
+  - `load_font_with_fallbacks()` - Load fonts with bundled and platform-specific fallbacks
+  - `contains_emoji()` - Detect emoji characters in text
+  - `is_valid_font_file()` - Validate font files before use
+  - Bundled fonts: NotoEmoji-Regular.ttf, DejaVuSans.ttf, Roboto-Black.ttf
+  - Prioritizes bundled fonts for consistent rendering across platforms
+
+- **`image_utils.py`**: Image processing utilities
+  - `ensure_grayscale()` - Convert images to grayscale
+  - `ensure_rgb()` - Convert images to RGB
+  - `ensure_mode()` - Convert to any PIL mode
+
+- **`validation_utils.py`**: Input validation
+  - `validate_choice()` - Validate enum-like choices
+  - `validate_conflict()` - Check for conflicting options
+
+- **`path_utils.py`**: File path handling
+  - `ensure_file_extension()` - Ensure correct file extension
+  - `prepare_output_path()` - Create directories and set extension
+
+- **`platform_utils.py`**: OS-specific operations
+  - `open_file_in_default_app()` - Cross-platform file opening
+
+#### Shared Geometry Generation
+Common functions generate vertices and triangles for both STL and 3MF formats:
+
+- **`generate_box_geometry()`** - Creates 3D box primitives
+- **`generate_qr_geometry()`** - Generates complete QR code 3D model
+- **`generate_keychain_mount_geometry()`** - Creates mounting features
+
+#### Format-Specific Implementation
+- **STL Format**: 
+  - Uses numpy arrays for efficient mesh generation
+  - Includes internal walls for proper 3D printing
+  - Binary STL format for smaller file sizes
+
+- **3MF Format**: 
+  - Uses lib3mf for proper color material support
+  - Supports separate components for multi-material printing
+  - Embeds color information directly in the file
+
+#### Component Tracking
+Geometry generation tracks which triangles belong to which components (base, QR modules, walls) for proper material assignment in 3MF files.
+
+This architecture ensures:
+- **Consistency**: Shared utilities provide uniform behavior
+- **Maintainability**: DRY principle reduces code duplication
+- **Extensibility**: Easy to add new features or formats
+- **Type Safety**: Full type annotations throughout
+- **Cross-Platform**: Works on macOS, Linux, and Windows
 
 
 ## License

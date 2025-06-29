@@ -8,10 +8,11 @@ from typing import cast
 
 import numpy as np
 import qrcode
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 from qrcode.constants import ERROR_CORRECT_H, ERROR_CORRECT_L, ERROR_CORRECT_M, ERROR_CORRECT_Q
 
 from .logging_config import get_logger
+from .utils import ensure_rgb, load_font_with_fallbacks, prepare_output_path
 
 logger = get_logger(__name__)
 
@@ -355,29 +356,15 @@ def add_label_to_qr(
     # Get image dimensions
     width, height = image.size
 
-    # Load Roboto Black font for clear 3D printing
-    font = None
+    # Load font for clear 3D printing
     actual_font_size = 16  # Use 16px for better readability in 3D prints
 
-    # Try to load Roboto Black font
-    font_path = Path(__file__).parent / "fonts" / "Roboto-Black.ttf"
-    try:
-        if font_path.exists():
-            font = ImageFont.truetype(str(font_path), actual_font_size)
-            logger.debug(f"Loaded Roboto Black font at size {actual_font_size}")
-        else:
-            logger.warning(f"Font file not found at {font_path}")
-    except Exception as e:
-        logger.warning(f"Could not load Roboto Black font: {e}")
-
-    # Fall back to default font if needed
-    if font is None:
-        try:
-            font = ImageFont.load_default()
-            logger.debug("Using default font")
-        except Exception:
-            logger.error("Could not load any font")
-            return image
+    # Load font with bundled fonts prioritized
+    font = load_font_with_fallbacks(
+        font_size=actual_font_size,
+        use_bold=True,
+        text=label,  # Pass label text to check for emoji
+    )
 
     # Get actual text dimensions using the font
     draw_dummy = ImageDraw.Draw(Image.new("RGB", (1, 1)))
@@ -427,6 +414,89 @@ def add_label_to_qr(
     return final_image
 
 
+def add_center_text_to_qr(
+    qr_image: Image.Image,
+    text: str,
+    font_size: int = 24,
+    font_name: str = "DejaVuSans.ttf",
+    size_percent: int = 20,
+    text_color: str = "black",
+    bg_color: str = "white",
+    convert_to_grayscale: bool = True,
+) -> Image.Image:
+    """Add text or emoji to the center of a QR code.
+
+    Args:
+        qr_image: PIL Image of the QR code
+        text: Text or emoji to display
+        font_size: Font size in pixels
+        font_name: Font name (must support emoji for emoji text)
+        size_percent: Size of text area as percentage of QR code size (10-30)
+        text_color: Color of the text
+        bg_color: Background color behind text
+        convert_to_grayscale: If True, convert to grayscale (default for STL)
+
+    Returns:
+        New PIL Image with text added to center
+    """
+    from PIL import ImageDraw
+
+    # Convert QR code to RGB if needed
+    qr_image = ensure_rgb(qr_image)
+
+    # Create a copy to avoid modifying the original
+    result = qr_image.copy()
+
+    # Calculate text area size
+    qr_width, qr_height = qr_image.size
+    text_area_size = int(min(qr_width, qr_height) * size_percent / 100)
+
+    # Load font with fallbacks, prioritizing emoji fonts if needed
+    font = load_font_with_fallbacks(font_size=font_size, font_name=font_name, text=text)
+
+    # Create text image with background
+    text_img = Image.new("RGB", (text_area_size, text_area_size), bg_color)
+    draw = ImageDraw.Draw(text_img)
+
+    # Calculate text bounding box
+    bbox = draw.textbbox((0, 0), text, font=font)
+    text_width = bbox[2] - bbox[0]
+    text_height = bbox[3] - bbox[1]
+
+    # If text is too large, adjust font size
+    if text_width > text_area_size * 0.9 or text_height > text_area_size * 0.9:
+        scale_factor = min((text_area_size * 0.9) / text_width, (text_area_size * 0.9) / text_height)
+        new_font_size = int(font_size * scale_factor)
+        # Reload font with new size
+        font = load_font_with_fallbacks(font_size=new_font_size, font_name=font_name, text=text)
+        # Recalculate bbox
+        bbox = draw.textbbox((0, 0), text, font=font)
+        text_width = bbox[2] - bbox[0]
+        text_height = bbox[3] - bbox[1]
+
+    # Center the text
+    x = (text_area_size - text_width) // 2
+    y = (text_area_size - text_height) // 2
+
+    # Draw the text
+    draw.text((x, y), text, fill=text_color, font=font)
+
+    # Convert to grayscale if requested
+    if convert_to_grayscale:
+        text_img = text_img.convert("L").convert("RGB")
+
+    # Calculate position to center on QR code
+    x_pos = (qr_width - text_area_size) // 2
+    y_pos = (qr_height - text_area_size) // 2
+
+    # Paste text image onto QR code
+    result.paste(text_img, (x_pos, y_pos))
+
+    mode_str = "grayscale" if convert_to_grayscale else "color"
+    logger.info(f"Added {mode_str} text '{text}' at {size_percent}% size")
+    return result
+
+
 def add_overlay_to_qr(
     qr_image: Image.Image,
     overlay_path: Path,
@@ -457,8 +527,7 @@ def add_overlay_to_qr(
         logger.debug(f"Loaded overlay image: {overlay.size}, mode: {overlay.mode}")
 
         # Convert QR code to RGB if needed
-        if qr_image.mode != "RGB":
-            qr_image = qr_image.convert("RGB")
+        qr_image = ensure_rgb(qr_image)
 
         # Create a copy to avoid modifying the original
         result = qr_image.copy()
@@ -654,12 +723,8 @@ def save_qr_code(
     Returns:
         Path to the saved file
     """
-    output_path = Path(output_path)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-
-    # Ensure it's a PNG file
-    if output_path.suffix.lower() != ".png":
-        output_path = output_path.with_suffix(".png")
+    # Prepare output path with .png extension
+    output_path = prepare_output_path(output_path, ".png")
 
     image.save(output_path, "PNG")
     logger.info(f"Saved QR code image to: {output_path}")

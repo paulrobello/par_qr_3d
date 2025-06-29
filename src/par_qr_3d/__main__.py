@@ -13,8 +13,17 @@ from rich_pixels import Pixels
 
 from . import __application_binary__, __application_title__, __version__
 from .logging_config import get_logger, setup_logging
-from .qr_generator import ErrorCorrectionLevel, QRType, add_label_to_qr, crop_qr_border, generate_qr_code, save_qr_code
+from .qr_generator import (
+    ErrorCorrectionLevel,
+    QRType,
+    add_center_text_to_qr,
+    add_label_to_qr,
+    crop_qr_border,
+    generate_qr_code,
+    save_qr_code,
+)
 from .stl_converter import convert_qr_to_3mf, convert_qr_to_stl
+from .utils import open_file_in_default_app, validate_choice, validate_conflict
 
 # Create the main Typer app with rich help
 app = typer.Typer(
@@ -225,6 +234,50 @@ def qr_command(
             max=30,
         ),
     ] = 20,
+    center_text: Annotated[
+        str | None,
+        typer.Option(
+            "--center-text",
+            "-ct",
+            help="Text or emoji to display in center of QR code",
+        ),
+    ] = None,
+    center_text_size: Annotated[
+        int,
+        typer.Option(
+            "--text-size",
+            "-ts",
+            help="Font size for center text in pixels",
+            min=8,
+            max=100,
+        ),
+    ] = 24,
+    center_text_area: Annotated[
+        int,
+        typer.Option(
+            "--text-area",
+            "-ta",
+            help="Size of text area as percentage of QR code (10-30)",
+            min=10,
+            max=30,
+        ),
+    ] = 20,
+    center_text_color: Annotated[
+        str,
+        typer.Option(
+            "--text-color",
+            "-tc",
+            help="Center text color (name or hex code)",
+        ),
+    ] = "black",
+    center_text_bg: Annotated[
+        str,
+        typer.Option(
+            "--text-bg",
+            "-tb",
+            help="Background color for center text (name or hex code)",
+        ),
+    ] = "white",
     base_color: Annotated[
         str,
         typer.Option(
@@ -281,6 +334,24 @@ def qr_command(
             help="Comma-separated layer heights in mm (e.g., '2,4,6'). First is base, second is QR, optional third is frame/border",
         ),
     ] = None,
+    mount: Annotated[
+        str | None,
+        typer.Option(
+            "--mount",
+            "-m",
+            help="Add mounting feature: 'keychain' for keyring loop, 'holes' for screw holes",
+        ),
+    ] = None,
+    hole_diameter: Annotated[
+        float,
+        typer.Option(
+            "--hole-diameter",
+            "-hd",
+            help="Diameter of mounting holes in mm (for keychain or screw holes)",
+            min=1.0,
+            max=10.0,
+        ),
+    ] = 4.0,
     frame_style: Annotated[
         str | None,
         typer.Option(
@@ -389,6 +460,14 @@ def qr_command(
             help="Contact organization (for contact QR codes)",
         ),
     ] = None,
+    open_file: Annotated[
+        bool,
+        typer.Option(
+            "--open",
+            "-X",
+            help="Open the generated file in the default application",
+        ),
+    ] = False,
     debug: Annotated[
         bool,
         typer.Option(
@@ -423,6 +502,11 @@ def qr_command(
         label_threshold: Threshold value for label text binarization (0-255).
         overlay_image: Path to an image file to overlay in the center of the QR code.
         overlay_size_percent: Size of the overlay as a percentage of QR code size (10-30%).
+        center_text: Text or emoji to display in the center of the QR code.
+        center_text_size: Font size for center text in pixels (8-100).
+        center_text_area: Size of text area as percentage of QR code (10-30%).
+        center_text_color: Color of the center text (name or hex code).
+        center_text_bg: Background color for center text (name or hex code).
         base_color: Background color of the QR code (name or hex code).
         qr_color: Color of the QR code modules (name or hex code).
         no_stl: If True, skip STL generation and only create PNG.
@@ -430,6 +514,8 @@ def qr_command(
         separate_components: Export 3MF with separate objects for each color (better slicer support).
         multi_layer: If True, create STL with multiple distinct layer heights.
         layer_heights: Comma-separated layer heights in mm. First is base, second is QR, optional third is frame.
+        mount: Type of mounting feature to add (keychain for keyring loop, holes for screw holes).
+        hole_diameter: Diameter of mounting holes in mm.
         frame_style: Style of decorative frame (square, rounded, hexagon, octagon).
         frame_width: Width of the frame border in pixels.
         frame_color: Color of the frame (name or hex code).
@@ -443,6 +529,7 @@ def qr_command(
         contact_phone: Contact phone number (for contact QR codes).
         contact_email: Contact email address (for contact QR codes).
         contact_org: Contact organization (for contact QR codes).
+        open_file: If True, open the generated file in the default application.
         debug: If True, enable debug mode with verbose output.
 
     Raises:
@@ -506,12 +593,24 @@ def qr_command(
         # Add label if requested
         if label:
             # Validate label position
-            if label_position.lower() not in ["top", "bottom"]:
-                console.print(
-                    f"[bold red]Error:[/bold red] Invalid label position '{label_position}'. Must be 'top' or 'bottom'."
-                )
-                raise typer.Exit(code=1)
-            qr_image = add_label_to_qr(qr_image, label, label_position.lower(), threshold=label_threshold)
+            label_position = validate_choice(label_position, ["top", "bottom"], "label position")
+            qr_image = add_label_to_qr(qr_image, label, label_position, threshold=label_threshold)
+
+        # Add center text if requested
+        if center_text:
+            # Check for conflict with overlay image
+            validate_conflict("--center-text", center_text, "--overlay-image", overlay_image)
+
+            qr_image = add_center_text_to_qr(
+                qr_image,
+                center_text,
+                font_size=center_text_size,
+                size_percent=center_text_area,
+                text_color=center_text_color,
+                bg_color=center_text_bg,
+                convert_to_grayscale=not no_stl,
+            )
+            logger.debug(f"Added center text: {center_text}")
 
         # Add overlay image if requested (after label to preserve grayscale)
         if overlay_image:
@@ -525,16 +624,13 @@ def qr_command(
             from .qr_generator import add_frame_to_qr
 
             # Validate frame style
-            valid_styles = ["square", "rounded", "hexagon", "octagon"]
-            if frame_style.lower() not in valid_styles:
-                console.print(
-                    f"[bold red]Error:[/bold red] Invalid frame style '{frame_style}'. "
-                    f"Must be one of: {', '.join(valid_styles)}"
-                )
-                raise typer.Exit(code=1)
-
-            qr_image = add_frame_to_qr(qr_image, frame_style.lower(), frame_width, frame_color)
+            frame_style = validate_choice(frame_style, ["square", "rounded", "hexagon", "octagon"], "frame style")
+            qr_image = add_frame_to_qr(qr_image, frame_style, frame_width, frame_color)
             logger.debug(f"Added {frame_style} frame with width {frame_width}")
+
+        # Validate mount parameter
+        if mount:
+            mount = validate_choice(mount, ["keychain", "holes"], "mount type")
 
         # Process multi-layer parameters
         parsed_layer_heights = None
@@ -628,6 +724,8 @@ def qr_command(
                     base_color=base_color,
                     qr_color=qr_color,
                     separate_components=separate_components,
+                    mount_type=mount,
+                    hole_diameter=hole_diameter,
                 )
                 console.print(f"[green]✓[/green] Created 3MF file: {model_path}")
             else:
@@ -643,6 +741,9 @@ def qr_command(
                         multi_layer=True,
                         layer_heights=parsed_layer_heights,
                         has_frame=frame_style is not None,
+                        mount_type=mount,
+                        hole_diameter=hole_diameter,
+                        debug=debug,
                     )
                 else:
                     model_path = convert_qr_to_stl(
@@ -652,6 +753,9 @@ def qr_command(
                         base_height_mm=base_thickness,
                         qr_height_mm=qr_depth,
                         invert=invert,
+                        mount_type=mount,
+                        hole_diameter=hole_diameter,
+                        debug=debug,
                     )
                 console.print(f"[green]✓[/green] Created STL file: {model_path}")
 
@@ -673,6 +777,11 @@ def qr_command(
         if frame_style:
             summary["Frame"] = f"{frame_style} ({frame_width}px, {frame_color})"
 
+        if center_text:
+            summary["Center Text"] = f'"{center_text}" ({center_text_color} on {center_text_bg})'
+        elif overlay_image:
+            summary["Overlay Image"] = str(overlay_image)
+
         if not no_stl:
             model_info = {
                 "Format": output_format.upper(),
@@ -684,11 +793,37 @@ def qr_command(
                 model_info["Colors"] = f"Base: {base_color}, QR: {qr_color}"
             if multi_layer and parsed_layer_heights:
                 model_info["Multi-Layer"] = f"Heights: {', '.join(f'{h}mm' for h in parsed_layer_heights)}"
+            if mount:
+                mount_info = f"{mount.capitalize()}"
+                if mount == "keychain":
+                    mount_info += f" (hole: {hole_diameter}mm)"
+                model_info["Mount"] = mount_info
             summary.update(model_info)
         else:
             summary["3D Generation"] = "Disabled"
 
         console.print(Pretty(summary))
+
+        # Open the generated file if requested
+        if open_file:
+            # Determine which file to open
+            file_to_open = None
+            if not no_stl:
+                # Open the 3D model file
+                if output_format.lower() == "3mf":
+                    file_to_open = output.with_suffix(".3mf")
+                else:
+                    file_to_open = output.with_suffix(".stl")
+            elif save_png:
+                # If no 3D file was generated, open the PNG
+                file_to_open = output.with_suffix(".png")
+
+            if file_to_open:
+                success = open_file_in_default_app(file_to_open)
+                if success:
+                    console.print(f"[green]✓[/green] Opened {file_to_open.name} in default application")
+                else:
+                    console.print(f"[yellow]Warning:[/yellow] Could not open {file_to_open.name} automatically")
 
     except KeyboardInterrupt:
         console.print("\n[yellow]Operation cancelled by user[/yellow]")

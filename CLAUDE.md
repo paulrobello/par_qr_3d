@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Par QR 3D is a CLI tool that generates 3D printable STL files from QR codes. It allows users to create QR codes with custom data and convert them into 3D models suitable for 3D printing. The project is built with modern Python tooling and follows best practices for type safety and code quality.
+Par QR 3D is a CLI tool that generates 3D printable STL and 3MF files from QR codes. It allows users to create QR codes with custom data and convert them into 3D models suitable for 3D printing. The project supports advanced features like color materials, mounting options, multi-layer heights, and artistic styles. Built with modern Python tooling and follows best practices for type safety and code quality.
 
 ## Development Commands
 
@@ -44,8 +44,17 @@ Par QR 3D is a CLI tool that generates 3D printable STL files from QR codes. It 
 ### Core Structure
 - **src/par_qr_3d/**: Main package directory
   - `__init__.py`: Package metadata and version info
-  - `__main__.py`: CLI entry point using Typer
+  - `__main__.py`: CLI entry point using Typer with comprehensive QR options
   - `logging_config.py`: Logging setup with Rich integration
+  - `qr_generator.py`: QR code generation with various types and styles
+  - `stl_converter.py`: 3D model generation with shared geometry functions
+  - **utils/**: Shared utility modules
+    - `color_utils.py`: Color parsing, RGB normalization, 3MF format conversion
+    - `font_utils.py`: Font loading with bundled fonts and emoji detection
+    - `image_utils.py`: Image mode conversion utilities
+    - `validation_utils.py`: Input validation and conflict checking
+    - `path_utils.py`: File path handling and preparation
+    - `platform_utils.py`: OS-specific operations (file opening)
 
 ### Entry Points
 - CLI script: `par_qr_3d`
@@ -54,6 +63,11 @@ Par QR 3D is a CLI tool that generates 3D printable STL files from QR codes. It 
 ### Key Dependencies
 - `typer` - Modern CLI framework
 - `rich` - Terminal formatting and output
+- `qrcode` - QR code generation
+- `numpy-stl` - STL file creation
+- `lib3mf` - 3MF file format support
+- `scipy` - Connected component analysis for frame detection
+- `Pillow` - Image processing
 - `pydantic` - Data validation
 - `python-dotenv` - Environment variable management
 
@@ -73,7 +87,25 @@ Par QR 3D is a CLI tool that generates 3D printable STL files from QR codes. It 
 
 ## Current Implementation Status
 
-The project has a complete implementation for generating 3D printable STL files from QR codes. The `qr` command supports multiple QR code types (text, URL, WiFi, email, phone, SMS, contact cards) with customizable dimensions and error correction levels.
+The project has a complete implementation for generating 3D printable files from QR codes:
+
+### Completed Features
+- **QR Code Types**: text, URL, WiFi, email, phone, SMS, contact cards (vCard)
+- **3D Formats**: STL (monochrome) and 3MF (with color materials)
+- **Visual Features**: Custom colors, text labels, center text/emoji (with bundled fonts), image overlays, decorative frames, artistic patterns
+- **3D Features**: Multi-layer heights, mounting options (keychain loops), inverted mode
+- **UI Features**: Auto-open generated files, terminal QR display, rich progress output
+- **Advanced**: Frame detection using connected component analysis, shared geometry generation for consistency
+
+### Architecture Highlights
+- **Shared Utilities**: Centralized utilities eliminate code duplication (~440+ lines saved)
+- **Shared Geometry**: Common functions generate vertices/triangles for both STL and 3MF
+- **Component Tracking**: Geometry tagged by component type (base, QR, walls) for material assignment
+- **Smart Triangulation**: Fan-pattern triangulation for proper hole geometry in mounts
+- **Format Optimization**: STL includes walls for printing, 3MF optimized for visual rendering
+- **Cross-Platform**: Font loading and file opening work on macOS, Linux, and Windows
+- **Bundled Fonts**: Includes NotoEmoji-Regular.ttf for emoji, DejaVuSans.ttf for Unicode, Roboto-Black.ttf for labels
+- **Type Safety**: Full type annotations with pyright checking
 
 ## Known Test Limitations
 - The terminal display of QR image does not work in tests but is working. Do not test that feature. If testing is needed, ask the developer.
