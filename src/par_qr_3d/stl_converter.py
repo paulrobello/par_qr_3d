@@ -262,8 +262,8 @@ def create_stl_from_heightmap(
 
     # Add faces for mounting features
     if mount_type == "keychain":
-        # The keychain mount has 54 triangles
-        num_faces += 54
+        # The keychain mount has 48 triangles
+        num_faces += 48
 
     # Create mesh
     stl_mesh: Any = mesh.Mesh(np.zeros(num_faces, dtype=mesh.Mesh.dtype))
@@ -855,71 +855,56 @@ def generate_keychain_mount_geometry(
         y = hole_center_y + hole_radius * np.sin(angle)
         vertices.append([x, y, 0])  # Bottom hole vertices
 
-    # TOP FACE - Fan triangulation from corners
-    # From bottom-left corner to hole vertices 4, 5
-    triangles.append((4, hole_vertices_top_start + 4, hole_vertices_top_start + 5))
+    # TOP FACE - Create triangles by connecting tab corners to hole vertices
+    # We need to create a "ring" of triangles around the hole
+    # Connect each edge of the tab to the corresponding hole vertices
 
-    # From bottom-right corner to hole vertices 7, 0
+    # Bottom edge to hole (vertices 4-5 to hole vertices 5-6-7-0)
+    triangles.append((4, hole_vertices_top_start + 5, hole_vertices_top_start + 6))
+    triangles.append((4, hole_vertices_top_start + 6, hole_vertices_top_start + 7))
+    triangles.append((4, hole_vertices_top_start + 7, 5))
     triangles.append((5, hole_vertices_top_start + 7, hole_vertices_top_start + 0))
 
-    # From top-right corner to hole vertices 2, 3
-    triangles.append((6, hole_vertices_top_start + 2, hole_vertices_top_start + 3))
-
-    # From top-left corner to hole vertices 3, 4
-    triangles.append((7, hole_vertices_top_start + 3, hole_vertices_top_start + 4))
-
-    # Bottom edge triangles
-    triangles.append((4, 5, hole_vertices_top_start + 7))
-    triangles.append((4, hole_vertices_top_start + 7, hole_vertices_top_start + 6))
-    triangles.append((4, hole_vertices_top_start + 6, hole_vertices_top_start + 5))
-
-    # Right edge triangles
-    triangles.append((5, 6, hole_vertices_top_start + 1))
-    triangles.append((5, hole_vertices_top_start + 1, hole_vertices_top_start + 0))
+    # Right edge to hole (vertices 5-6 to hole vertices 0-1-2)
+    triangles.append((5, hole_vertices_top_start + 0, hole_vertices_top_start + 1))
+    triangles.append((5, hole_vertices_top_start + 1, 6))
     triangles.append((6, hole_vertices_top_start + 1, hole_vertices_top_start + 2))
 
-    # Top edge triangle
-    triangles.append((6, 7, hole_vertices_top_start + 3))
+    # Top edge to hole (vertices 6-7 to hole vertices 2-3-4)
+    triangles.append((6, hole_vertices_top_start + 2, hole_vertices_top_start + 3))
+    triangles.append((6, hole_vertices_top_start + 3, 7))
+    triangles.append((7, hole_vertices_top_start + 3, hole_vertices_top_start + 4))
 
-    # Left edge triangle
-    triangles.append((7, 4, hole_vertices_top_start + 4))
-
-    # Connect remaining hole vertices
-    triangles.append((hole_vertices_top_start + 5, hole_vertices_top_start + 6, hole_vertices_top_start + 7))
-    triangles.append((hole_vertices_top_start + 1, hole_vertices_top_start + 2, hole_vertices_top_start + 3))
-    triangles.append((hole_vertices_top_start + 3, hole_vertices_top_start + 4, hole_vertices_top_start + 5))
-    triangles.append((hole_vertices_top_start + 7, hole_vertices_top_start + 0, hole_vertices_top_start + 1))
+    # Left edge to hole (vertices 7-4 to hole vertices 4-5)
+    triangles.append((7, hole_vertices_top_start + 4, hole_vertices_top_start + 5))
+    triangles.append((7, hole_vertices_top_start + 5, 4))
 
     # BOTTOM FACE - Same pattern but reversed winding
-    # From corners (reversed winding)
-    triangles.append((0, hole_vertices_bottom_start + 5, hole_vertices_bottom_start + 4))
+    # Bottom edge to hole (vertices 0-1 to hole vertices 5-6-7-0)
+    triangles.append((0, hole_vertices_bottom_start + 6, hole_vertices_bottom_start + 5))
+    triangles.append((0, hole_vertices_bottom_start + 7, hole_vertices_bottom_start + 6))
+    triangles.append((0, 1, hole_vertices_bottom_start + 7))
     triangles.append((1, hole_vertices_bottom_start + 0, hole_vertices_bottom_start + 7))
-    triangles.append((2, hole_vertices_bottom_start + 3, hole_vertices_bottom_start + 2))
-    triangles.append((3, hole_vertices_bottom_start + 4, hole_vertices_bottom_start + 3))
 
-    # Bottom edge
-    triangles.append((0, hole_vertices_bottom_start + 7, 1))
-    triangles.append((0, hole_vertices_bottom_start + 6, hole_vertices_bottom_start + 7))
-    triangles.append((0, hole_vertices_bottom_start + 5, hole_vertices_bottom_start + 6))
-
-    # Right edge
-    triangles.append((1, hole_vertices_bottom_start + 1, 2))
-    triangles.append((1, hole_vertices_bottom_start + 0, hole_vertices_bottom_start + 1))
+    # Right edge to hole (vertices 1-2 to hole vertices 0-1-2)
+    triangles.append((1, hole_vertices_bottom_start + 1, hole_vertices_bottom_start + 0))
+    triangles.append((1, 2, hole_vertices_bottom_start + 1))
     triangles.append((2, hole_vertices_bottom_start + 2, hole_vertices_bottom_start + 1))
 
-    # Top edge
-    triangles.append((2, hole_vertices_bottom_start + 3, 3))
+    # Top edge to hole (vertices 2-3 to hole vertices 2-3-4)
+    triangles.append((2, hole_vertices_bottom_start + 3, hole_vertices_bottom_start + 2))
+    triangles.append((2, 3, hole_vertices_bottom_start + 3))
+    triangles.append((3, hole_vertices_bottom_start + 4, hole_vertices_bottom_start + 3))
 
-    # Left edge
-    triangles.append((3, hole_vertices_bottom_start + 4, 0))
-
-    # Connect remaining hole vertices (reversed)
-    triangles.append((hole_vertices_bottom_start + 5, hole_vertices_bottom_start + 7, hole_vertices_bottom_start + 6))
-    triangles.append((hole_vertices_bottom_start + 1, hole_vertices_bottom_start + 3, hole_vertices_bottom_start + 2))
-    triangles.append((hole_vertices_bottom_start + 3, hole_vertices_bottom_start + 5, hole_vertices_bottom_start + 4))
-    triangles.append((hole_vertices_bottom_start + 7, hole_vertices_bottom_start + 1, hole_vertices_bottom_start + 0))
+    # Left edge to hole (vertices 3-0 to hole vertices 4-5)
+    triangles.append((3, hole_vertices_bottom_start + 5, hole_vertices_bottom_start + 4))
+    triangles.append((3, 0, hole_vertices_bottom_start + 5))
 
     # SIDE WALLS
+    # Back face (connecting to QR code base)
+    triangles.append((0, 1, 4))
+    triangles.append((1, 5, 4))
+
     # Front face (away from QR code)
     triangles.append((3, 7, 2))
     triangles.append((2, 7, 6))
@@ -932,7 +917,7 @@ def generate_keychain_mount_geometry(
     triangles.append((1, 2, 5))
     triangles.append((2, 6, 5))
 
-    # HOLE WALLS - normals should point inward (into the hole)
+    # HOLE WALLS - normals should point outward (away from hole center)
     for i in range(num_sides):
         next_i = (i + 1) % num_sides
         top_i = hole_vertices_top_start + i
@@ -940,9 +925,9 @@ def generate_keychain_mount_geometry(
         bottom_i = hole_vertices_bottom_start + i
         bottom_next = hole_vertices_bottom_start + next_i
 
-        # Two triangles per wall segment with correct winding for inward normals
-        triangles.append((top_i, bottom_i, top_next))
-        triangles.append((top_next, bottom_i, bottom_next))
+        # Two triangles per wall segment with correct winding for outward normals
+        triangles.append((top_i, top_next, bottom_i))
+        triangles.append((top_next, bottom_next, bottom_i))
 
     return vertices, triangles
 
@@ -1417,7 +1402,6 @@ def convert_qr_to_3mf(
         img_height, img_width = height_map.shape
         base_width = img_width * pixel_size
         base_depth = img_height * pixel_size
-        max_height = base_height_mm + qr_height_mm
 
         # Choose which mesh to add mount to
         mount_target_mesh = base_mesh if separate_components else mesh_object
@@ -1427,7 +1411,7 @@ def convert_qr_to_3mf(
             mount_target_mesh,
             base_width,
             base_depth,
-            max_height,
+            base_height_mm,  # Use base height, not max height
             hole_diameter,
             material_group if not separate_components else None,
             base_material_id if not separate_components else None,
