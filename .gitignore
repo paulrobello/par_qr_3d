@@ -81,3 +81,5 @@ todos.md
 *.stl
 /qr_code.png
 *.3mf
+test_*.png
+/src/par_qr_3d-main-branch/

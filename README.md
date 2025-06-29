@@ -737,6 +737,41 @@ The 3D model includes:
 - Multi-layer support for distinct height levels
 - Internal walls for proper 3D printing (STL format)
 
+## Technical Details: STL vs 3MF Formats
+
+The tool uses different geometry generation approaches for each output format to optimize for their specific use cases:
+
+### STL Format (Single-Material Printing)
+- **Approach**: Surface-based geometry generation
+- **Structure**: 
+  - Complete top surface mesh (2 triangles per pixel)
+  - Internal walls between height transitions
+  - Outer perimeter walls
+  - Solid bottom face
+- **Optimization**: Generates only visible surfaces to minimize file size
+- **Use Case**: Standard single-color 3D printing
+- **File Size**: Smaller due to efficient geometry
+
+### 3MF Format (Multi-Material Printing)
+- **Approach**: Complete 3D object generation
+- **Structure**:
+  - Each QR module is a complete 3D box (all 6 faces)
+  - Base plate is a complete 3D box
+  - No internal walls needed
+- **Features**: 
+  - Embeds color/material information
+  - Supports separate mesh objects per color
+  - Compatible with multi-material slicers
+- **Use Case**: Multi-color/multi-material 3D printing
+- **File Size**: Larger due to complete geometry
+
+### Why Different Approaches?
+
+1. **STL Limitations**: STL format only stores geometry, no color data
+2. **3MF Advantages**: Modern format designed for advanced manufacturing
+3. **Slicer Compatibility**: Different slicers handle multi-material printing differently
+4. **Optimization**: Each approach is optimized for its intended use case
+
 ## 3D Printing Tips
 
 1. **Print Settings**:
@@ -752,6 +787,11 @@ The 3D model includes:
 3. **Contrast**:
    - Use contrasting filament colors (black on white, white on black)
    - Consider painting the raised portions for better scanning
+
+4. **Multi-Material Printing (3MF)**:
+   - Use the `--format 3mf` option with color settings
+   - Ensure your slicer supports 3MF color import
+   - Consider `--separate-components` for better slicer compatibility
 
 ## CLI Options Reference
 
@@ -893,15 +933,23 @@ Common functions generate vertices and triangles for both STL and 3MF formats:
 - **`generate_keychain_mount_geometry()`** - Creates mounting features
 
 #### Format-Specific Implementation
+
+The project uses different geometry generation approaches optimized for each format:
+
 - **STL Format**: 
+  - Surface-based approach with complete top mesh
+  - Generates internal walls at height transitions
   - Uses numpy arrays for efficient mesh generation
-  - Includes internal walls for proper 3D printing
   - Binary STL format for smaller file sizes
+  - Optimized for single-material 3D printing
 
 - **3MF Format**: 
+  - Complete 3D object approach (full boxes)
+  - Each QR module is a complete 3D box with all faces
   - Uses lib3mf for proper color material support
   - Supports separate components for multi-material printing
   - Embeds color information directly in the file
+  - Larger files but enables advanced printing features
 
 #### Component Tracking
 Geometry generation tracks which triangles belong to which components (base, QR modules, walls) for proper material assignment in 3MF files.

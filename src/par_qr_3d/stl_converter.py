@@ -1,4 +1,28 @@
-"""Convert QR code images to 3D STL models."""
+"""Convert QR code images to 3D STL and 3MF models.
+
+This module handles the conversion of QR code images to 3D printable formats.
+It supports two different output formats with different geometry generation approaches:
+
+STL Format:
+- Optimized for single-material 3D printing
+- Uses an efficient surface-based approach
+- Generates only the visible surfaces (top surfaces + walls)
+- Internal walls ensure proper slicing for 3D printing
+- Results in smaller file sizes and faster processing
+
+3MF Format:
+- Designed for multi-material/multi-color 3D printing
+- Uses complete 3D object generation
+- Each QR module is a full 3D box with all 6 faces
+- Base plate is a complete 3D box
+- Supports color/material assignment per component
+- Results in larger files but enables color printing
+
+The different approaches are necessary because:
+- STL format only contains geometry, no color information
+- 3MF format embeds color/material data with the geometry
+- Slicers handle the formats differently for multi-material printing
+"""
 
 from __future__ import annotations
 
@@ -212,20 +236,29 @@ def create_stl_from_heightmap(
     Returns:
         STL Mesh object with optional mounting features
     """
-    # Get base height (minimum height in the map)
-    base_height = np.min(height_map)
+    height, width = height_map.shape
 
-    # Generate QR geometry using shared function
-    vertices, triangles, component_info = generate_qr_geometry(
-        height_map,
-        pixel_size,
-        base_height,
-        include_base=True,  # Include complete base geometry
-        include_walls=True,
-    )
+    # We need to count faces more carefully
+    # Top surface: 2 triangles per pixel
+    num_faces = height * width * 2
 
-    # Count faces
-    num_faces = len(triangles)
+    # Bottom surface: 2 triangles for entire base
+    num_faces += 2
+
+    # Outer walls: 2 triangles per edge pixel
+    num_faces += 2 * (2 * height + 2 * width)
+
+    # Internal walls: We need walls at every height transition
+    # Count transitions between adjacent pixels
+    for y in range(height):
+        for x in range(width):
+            curr_height = height_map[y, x]
+            # Check right neighbor
+            if x < width - 1 and height_map[y, x + 1] != curr_height:
+                num_faces += 2  # Two triangles for vertical wall
+            # Check bottom neighbor
+            if y < height - 1 and height_map[y + 1, x] != curr_height:
+                num_faces += 2  # Two triangles for vertical wall
 
     # Add faces for mounting features
     if mount_type == "keychain":
@@ -237,25 +270,144 @@ def create_stl_from_heightmap(
 
     face_idx = 0
 
-    # Add all triangles from shared geometry
-    for v0, v1, v2 in triangles:
-        stl_mesh.vectors[face_idx] = np.array([vertices[v0], vertices[v1], vertices[v2]])
+    # Create top surface
+    for y in range(height):
+        for x in range(width):
+            # Get the four corners of this pixel
+            x0, y0 = x * pixel_size, y * pixel_size
+            x1, y1 = (x + 1) * pixel_size, (y + 1) * pixel_size
+
+            # Height for this pixel
+            h = height_map[y, x]
+
+            # First triangle
+            stl_mesh.vectors[face_idx] = np.array([[x0, y0, h], [x1, y0, h], [x0, y1, h]])
+            face_idx += 1
+
+            # Second triangle
+            stl_mesh.vectors[face_idx] = np.array([[x1, y0, h], [x1, y1, h], [x0, y1, h]])
+            face_idx += 1
+
+    # Create internal walls at height transitions
+    for y in range(height):
+        for x in range(width):
+            x0, y0 = x * pixel_size, y * pixel_size
+            x1, y1 = (x + 1) * pixel_size, (y + 1) * pixel_size
+            curr_height = height_map[y, x]
+
+            # Check right neighbor - create vertical wall if heights differ
+            if x < width - 1:
+                right_height = height_map[y, x + 1]
+                if curr_height != right_height:
+                    # Create wall between current and right pixel
+                    # Wall goes from min height to max height
+                    min_h = min(curr_height, right_height)
+                    max_h = max(curr_height, right_height)
+
+                    # Two triangles forming a vertical rectangle
+                    if curr_height > right_height:
+                        # Current is higher, normal points left
+                        stl_mesh.vectors[face_idx] = np.array([[x1, y0, min_h], [x1, y1, min_h], [x1, y0, max_h]])
+                        face_idx += 1
+
+                        stl_mesh.vectors[face_idx] = np.array([[x1, y1, min_h], [x1, y1, max_h], [x1, y0, max_h]])
+                        face_idx += 1
+                    else:
+                        # Right is higher, normal points right
+                        stl_mesh.vectors[face_idx] = np.array([[x1, y0, min_h], [x1, y0, max_h], [x1, y1, min_h]])
+                        face_idx += 1
+
+                        stl_mesh.vectors[face_idx] = np.array([[x1, y0, max_h], [x1, y1, max_h], [x1, y1, min_h]])
+                        face_idx += 1
+
+            # Check bottom neighbor - create vertical wall if heights differ
+            if y < height - 1:
+                bottom_height = height_map[y + 1, x]
+                if curr_height != bottom_height:
+                    # Create wall between current and bottom pixel
+                    # Wall goes from min height to max height
+                    min_h = min(curr_height, bottom_height)
+                    max_h = max(curr_height, bottom_height)
+
+                    # Two triangles forming a vertical rectangle
+                    if curr_height > bottom_height:
+                        # Current is higher, normal points up
+                        stl_mesh.vectors[face_idx] = np.array([[x0, y1, min_h], [x1, y1, min_h], [x0, y1, max_h]])
+                        face_idx += 1
+
+                        stl_mesh.vectors[face_idx] = np.array([[x1, y1, min_h], [x1, y1, max_h], [x0, y1, max_h]])
+                        face_idx += 1
+                    else:
+                        # Bottom is higher, normal points down
+                        stl_mesh.vectors[face_idx] = np.array([[x0, y1, min_h], [x0, y1, max_h], [x1, y1, min_h]])
+                        face_idx += 1
+
+                        stl_mesh.vectors[face_idx] = np.array([[x0, y1, max_h], [x1, y1, max_h], [x1, y1, min_h]])
+                        face_idx += 1
+
+    # Create outer walls
+    total_width = width * pixel_size
+    total_height = height * pixel_size
+
+    # Front side (y=0)
+    for x in range(width):
+        x0, x1 = x * pixel_size, (x + 1) * pixel_size
+        h = height_map[0, x]
+
+        # Two triangles
+        stl_mesh.vectors[face_idx] = np.array([[x0, 0, 0], [x1, 0, 0], [x0, 0, h]])
         face_idx += 1
+        stl_mesh.vectors[face_idx] = np.array([[x1, 0, 0], [x1, 0, h], [x0, 0, h]])
+        face_idx += 1
+
+    # Back side (y=max)
+    for x in range(width):
+        x0, x1 = x * pixel_size, (x + 1) * pixel_size
+        h = height_map[height - 1, x]
+
+        # Two triangles
+        stl_mesh.vectors[face_idx] = np.array([[x0, total_height, h], [x1, total_height, h], [x0, total_height, 0]])
+        face_idx += 1
+        stl_mesh.vectors[face_idx] = np.array([[x1, total_height, h], [x1, total_height, 0], [x0, total_height, 0]])
+        face_idx += 1
+
+    # Left side (x=0)
+    for y in range(height):
+        y0, y1 = y * pixel_size, (y + 1) * pixel_size
+        h = height_map[y, 0]
+
+        # Two triangles
+        stl_mesh.vectors[face_idx] = np.array([[0, y0, h], [0, y1, h], [0, y0, 0]])
+        face_idx += 1
+        stl_mesh.vectors[face_idx] = np.array([[0, y1, h], [0, y1, 0], [0, y0, 0]])
+        face_idx += 1
+
+    # Right side (x=max)
+    for y in range(height):
+        y0, y1 = y * pixel_size, (y + 1) * pixel_size
+        h = height_map[y, width - 1]
+
+        # Two triangles
+        stl_mesh.vectors[face_idx] = np.array([[total_width, y0, 0], [total_width, y1, 0], [total_width, y0, h]])
+        face_idx += 1
+        stl_mesh.vectors[face_idx] = np.array([[total_width, y1, 0], [total_width, y1, h], [total_width, y0, h]])
+        face_idx += 1
+
+    # Bottom face - solid base covering entire area
+    stl_mesh.vectors[face_idx] = np.array([[0, 0, 0], [total_width, 0, 0], [0, total_height, 0]])
+    face_idx += 1
+    stl_mesh.vectors[face_idx] = np.array([[total_width, 0, 0], [total_width, total_height, 0], [0, total_height, 0]])
+    face_idx += 1
 
     # Add mounting features if requested
     if mount_type == "keychain":
-        # Get dimensions
-        height, width = height_map.shape
-        total_width = width * pixel_size
-        total_depth = height * pixel_size
-
         # Get the maximum height of the model
         max_height = np.max(height_map)
         face_idx = add_keychain_mount(
             stl_mesh,
             face_idx,
             total_width,
-            total_depth,
+            total_height,
             max_height,
             hole_diameter,
         )
@@ -481,50 +633,34 @@ def generate_qr_geometry(
     triangles = []
     component_info = {"base_triangles": [], "qr_triangles": [], "wall_triangles": [], "top_surface_triangles": []}
 
-    # Generate top surface only for pixels at base height
-    # Raised pixels will get their top face from the box geometry
+    # Generate top surface for ALL pixels (matching main branch approach)
     for y in range(height):
         for x in range(width):
-            h = height_map[y, x]
-
-            # Only create top face for pixels at base height
-            if abs(h - base_height) < 0.001:
-                x0, y0 = x * pixel_size, y * pixel_size
-                x1, y1 = (x + 1) * pixel_size, (y + 1) * pixel_size
-
-                # Add vertices for this pixel's top surface
-                v_start = len(vertices)
-                vertices.extend([[x0, y0, h], [x1, y0, h], [x1, y1, h], [x0, y1, h]])
-
-                # Add triangles for top surface
-                tri_start = len(triangles)
-                triangles.extend([(v_start, v_start + 1, v_start + 3), (v_start + 1, v_start + 2, v_start + 3)])
-                component_info["top_surface_triangles"].extend(range(tri_start, len(triangles)))
-
-    # Generate QR modules (raised pixels) WITHOUT BOTTOM FACES
-    for y in range(height):
-        for x in range(width):
+            # Get the four corners of this pixel
             x0, y0 = x * pixel_size, y * pixel_size
             x1, y1 = (x + 1) * pixel_size, (y + 1) * pixel_size
-            z0 = base_height
-            z1 = height_map[y, x]
 
-            # Skip if this pixel is at base height
-            if abs(z1 - base_height) < 0.001:
-                continue
+            # Height for this pixel
+            h = height_map[y, x]
 
-            # Generate box WITHOUT BOTTOM for this QR module
-            box_vertices, box_triangles = generate_box_geometry_no_bottom(x0, y0, z0, x1, y1, z1)
+            # Add vertices for this pixel's top surface
+            v_start = len(vertices)
+            vertices.extend([[x0, y0, h], [x1, y0, h], [x1, y1, h], [x0, y1, h]])
 
-            # Add vertices
-            v_offset = len(vertices)
-            vertices.extend(box_vertices)
-
-            # Add triangles with offset
+            # Add triangles for top surface
             tri_start = len(triangles)
-            for v0, v1, v2 in box_triangles:
-                triangles.append((v0 + v_offset, v1 + v_offset, v2 + v_offset))
-            component_info["qr_triangles"].extend(range(tri_start, len(triangles)))
+            # First triangle
+            triangles.append((v_start, v_start + 1, v_start + 3))
+            # Second triangle
+            triangles.append((v_start + 1, v_start + 2, v_start + 3))
+
+            # Track which component these triangles belong to
+            if abs(h - base_height) < 0.001:
+                # This is at base height
+                component_info["base_triangles"].extend(range(tri_start, len(triangles)))
+            else:
+                # This is a raised QR module
+                component_info["qr_triangles"].extend(range(tri_start, len(triangles)))
 
     if include_walls:
         # Generate internal walls at height transitions
@@ -637,17 +773,14 @@ def generate_qr_geometry(
         component_info["wall_triangles"].extend(range(tri_start, len(triangles)))
 
     if include_base:
-        # Generate base plate WITHOUT TOP FACE - individual pixels provide the top surface
-        base_vertices, base_triangles = generate_box_geometry_no_top(0, 0, 0, total_width, total_depth, base_height)
+        # Generate bottom face - solid base covering entire area
+        v_start = len(vertices)
+        vertices.extend([[0, 0, 0], [total_width, 0, 0], [total_width, total_depth, 0], [0, total_depth, 0]])
 
-        # Add vertices
-        v_offset = len(vertices)
-        vertices.extend(base_vertices)
-
-        # Add triangles
+        # Add bottom face triangles
         tri_start = len(triangles)
-        for v0, v1, v2 in base_triangles:
-            triangles.append((v0 + v_offset, v1 + v_offset, v2 + v_offset))
+        triangles.append((v_start, v_start + 1, v_start + 3))
+        triangles.append((v_start + 1, v_start + 2, v_start + 3))
         component_info["base_triangles"].extend(range(tri_start, len(triangles)))
 
     return vertices, triangles, component_info
@@ -925,6 +1058,16 @@ def convert_qr_to_stl(
 ) -> Path:
     """Convert a QR code image to an STL file.
 
+    This function uses an optimized surface-based approach for STL generation:
+    - Creates a complete top surface mesh (2 triangles per pixel)
+    - Adds internal walls between pixels of different heights
+    - Includes outer walls and a solid bottom face
+    - Results in efficient, watertight meshes suitable for 3D printing
+
+    The STL format contains only geometry data (no color information) and is
+    optimized for single-material 3D printing. The internal walls ensure proper
+    slicing behavior in 3D printing software.
+
     Args:
         qr_image: PIL Image of the QR code
         output_path: Path to save the STL file
@@ -1029,6 +1172,22 @@ def convert_qr_to_3mf(
 ) -> Path:
     """Convert a QR code image to a 3MF file with color support using lib3mf.
 
+    This function uses a complete 3D object approach for 3MF generation:
+    - Each raised QR module is created as a complete 3D box (all 6 faces)
+    - The base plate is a complete 3D box with all faces
+    - Each component can have its own color/material assignment
+    - Supports both single mesh with materials and separate mesh objects
+
+    The 3MF format is designed for multi-material/multi-color 3D printing and
+    embeds color and material information directly in the file. This approach
+    creates larger files than STL but enables advanced printing features like:
+    - Multi-color printing on compatible printers
+    - Material assignment per component
+    - Better integration with modern slicing software
+
+    Note: Unlike STL generation, 3MF does not need internal walls as the
+    complete box geometry provides all necessary structure for slicing.
+
     Args:
         qr_image: PIL Image of the QR code
         output_path: Path to save the 3MF file
@@ -1115,81 +1274,139 @@ def convert_qr_to_3mf(
         mesh_object.SetName("QR Code")
         triangle_properties = []
 
-    # Generate QR geometry using shared function
-    geometry_vertices, geometry_triangles, component_info = generate_qr_geometry(
-        height_map,
-        pixel_size,
-        base_height_mm,
-        include_base=True,
-        include_walls=False,  # 3MF doesn't need internal walls for visual purposes
-    )
+    # Build QR modules
+    for y in range(img_height):
+        for x in range(img_width):
+            x0, y0 = x * pixel_size, y * pixel_size
+            x1, y1 = (x + 1) * pixel_size, (y + 1) * pixel_size
+            z0 = base_height_mm  # Start from base height
+            z1 = height_map[y, x]
 
-    # Add vertices and triangles to 3MF meshes
-    if separate_components:
-        # Add vertices to appropriate meshes
-        base_vertex_map = {}
-        qr_vertex_map = {}
+            # Skip if this pixel is at base height (no need to create a box)
+            if abs(z1 - base_height_mm) < 0.001:
+                continue
 
-        # First pass: add all vertices to appropriate meshes
-        for i, (x, y, z) in enumerate(geometry_vertices):
-            position = lib3mf.Position()
-            position.Coordinates[0] = float(x)
-            position.Coordinates[1] = float(y)
-            position.Coordinates[2] = float(z)
+            # Choose which mesh to add to
+            current_mesh = qr_mesh if separate_components else mesh_object
 
-            # Add to both meshes for now, we'll use the maps to track which to use
-            base_vertex_map[i] = base_mesh.AddVertex(position)
-            qr_vertex_map[i] = qr_mesh.AddVertex(position)
+            # Add 8 vertices for the box
+            vertices_indices = []
+            for vx, vy, vz in [
+                (x0, y0, z0),
+                (x1, y0, z0),
+                (x1, y1, z0),
+                (x0, y1, z0),
+                (x0, y0, z1),
+                (x1, y0, z1),
+                (x1, y1, z1),
+                (x0, y1, z1),
+            ]:
+                position = lib3mf.Position()
+                position.Coordinates[0] = float(vx)
+                position.Coordinates[1] = float(vy)
+                position.Coordinates[2] = float(vz)
+                vertices_indices.append(current_mesh.AddVertex(position))
 
-        # Second pass: add triangles to appropriate meshes
-        for tri_idx, (v0, v1, v2) in enumerate(geometry_triangles):
-            triangle = lib3mf.Triangle()
+            # Create triangles for the box (12 triangles, 2 per face)
+            triangle_indices = [
+                # Bottom face
+                (0, 2, 1),
+                (0, 3, 2),
+                # Top face
+                (4, 5, 6),
+                (4, 6, 7),
+                # Front face
+                (0, 1, 5),
+                (0, 5, 4),
+                # Back face
+                (3, 7, 6),
+                (3, 6, 2),
+                # Left face
+                (0, 4, 7),
+                (0, 7, 3),
+                # Right face
+                (1, 2, 6),
+                (1, 6, 5),
+            ]
 
-            if tri_idx in component_info["base_triangles"]:
-                # This is a base triangle
-                triangle.Indices[0] = base_vertex_map[v0]
-                triangle.Indices[1] = base_vertex_map[v1]
-                triangle.Indices[2] = base_vertex_map[v2]
-                base_mesh.AddTriangle(triangle)
-            else:
-                # This is a QR module triangle
-                triangle.Indices[0] = qr_vertex_map[v0]
-                triangle.Indices[1] = qr_vertex_map[v1]
-                triangle.Indices[2] = qr_vertex_map[v2]
-                qr_mesh.AddTriangle(triangle)
-    else:
-        # Single mesh - add all vertices
-        vertex_map = {}
-        for i, (x, y, z) in enumerate(geometry_vertices):
-            position = lib3mf.Position()
-            position.Coordinates[0] = float(x)
-            position.Coordinates[1] = float(y)
-            position.Coordinates[2] = float(z)
-            vertex_map[i] = mesh_object.AddVertex(position)
+            # Add triangles and set material
+            for v0, v1, v2 in triangle_indices:
+                triangle = lib3mf.Triangle()
+                triangle.Indices[0] = vertices_indices[v0]
+                triangle.Indices[1] = vertices_indices[v1]
+                triangle.Indices[2] = vertices_indices[v2]
+                current_mesh.AddTriangle(triangle)
 
-        # Add all triangles with appropriate materials
-        for tri_idx, (v0, v1, v2) in enumerate(geometry_triangles):
-            triangle = lib3mf.Triangle()
-            triangle.Indices[0] = vertex_map[v0]
-            triangle.Indices[1] = vertex_map[v1]
-            triangle.Indices[2] = vertex_map[v2]
-            mesh_object.AddTriangle(triangle)
+                if not separate_components:
+                    # Create triangle properties with QR material
+                    prop = lib3mf.TriangleProperties()
+                    prop.ResourceID = material_group.GetResourceID()
+                    prop.PropertyIDs[0] = qr_material_id
+                    prop.PropertyIDs[1] = qr_material_id
+                    prop.PropertyIDs[2] = qr_material_id
+                    triangle_properties.append(prop)
 
-            # Create triangle properties with appropriate material
+    # Add complete base plate as a box
+    base_width = img_width * pixel_size
+    base_depth = img_height * pixel_size
+
+    # Choose which mesh to add base to
+    base_target_mesh = base_mesh if separate_components else mesh_object
+
+    # Create 8 vertices for the base box
+    base_vertices = []
+    for vx, vy, vz in [
+        (0, 0, 0),  # 0: bottom-left-bottom
+        (base_width, 0, 0),  # 1: bottom-right-bottom
+        (base_width, base_depth, 0),  # 2: top-right-bottom
+        (0, base_depth, 0),  # 3: top-left-bottom
+        (0, 0, base_height_mm),  # 4: bottom-left-top
+        (base_width, 0, base_height_mm),  # 5: bottom-right-top
+        (base_width, base_depth, base_height_mm),  # 6: top-right-top
+        (0, base_depth, base_height_mm),  # 7: top-left-top
+    ]:
+        position = lib3mf.Position()
+        position.Coordinates[0] = float(vx)
+        position.Coordinates[1] = float(vy)
+        position.Coordinates[2] = float(vz)
+        base_vertices.append(base_target_mesh.AddVertex(position))
+
+    # Create triangles for all 6 faces of the base box
+    base_triangle_indices = [
+        # Bottom face
+        (0, 2, 1),
+        (0, 3, 2),
+        # Top face
+        (4, 5, 6),
+        (4, 6, 7),
+        # Front face
+        (0, 1, 5),
+        (0, 5, 4),
+        # Back face
+        (3, 7, 6),
+        (3, 6, 2),
+        # Left face
+        (0, 4, 7),
+        (0, 7, 3),
+        # Right face
+        (1, 2, 6),
+        (1, 6, 5),
+    ]
+
+    for v0, v1, v2 in base_triangle_indices:
+        triangle = lib3mf.Triangle()
+        triangle.Indices[0] = base_vertices[v0]
+        triangle.Indices[1] = base_vertices[v1]
+        triangle.Indices[2] = base_vertices[v2]
+        base_target_mesh.AddTriangle(triangle)
+
+        if not separate_components:
+            # Create triangle properties with base material
             prop = lib3mf.TriangleProperties()
             prop.ResourceID = material_group.GetResourceID()
-
-            if tri_idx in component_info["base_triangles"]:
-                # Base material
-                prop.PropertyIDs[0] = base_material_id
-                prop.PropertyIDs[1] = base_material_id
-                prop.PropertyIDs[2] = base_material_id
-            else:
-                # QR material
-                prop.PropertyIDs[0] = qr_material_id
-                prop.PropertyIDs[1] = qr_material_id
-                prop.PropertyIDs[2] = qr_material_id
-
+            prop.PropertyIDs[0] = base_material_id
+            prop.PropertyIDs[1] = base_material_id
+            prop.PropertyIDs[2] = base_material_id
             triangle_properties.append(prop)
 
     # Add mounting features if requested

@@ -6,7 +6,8 @@
     "**/node_modules",
     "**/__pycache__",
     "**/output",
-    "**/build"
+    "**/build",
+    "src/par_qr_3d-main-branch/**"
   ],
   "ignore": [
     "**/.venv"
