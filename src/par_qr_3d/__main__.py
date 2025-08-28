@@ -289,6 +289,16 @@ def qr_command(
             help="Background color for center text (name or hex code)",
         ),
     ] = "white",
+    center_text_threshold: Annotated[
+        int | None,
+        typer.Option(
+            "--text-threshold",
+            "-tt",
+            help="Threshold for center text binarization (0-255). Creates pure black/white for STL",
+            min=0,
+            max=255,
+        ),
+    ] = 128,
     base_color: Annotated[
         str,
         typer.Option(
@@ -519,6 +529,7 @@ def qr_command(
         center_text_area: Size of text area as percentage of QR code (10-30%).
         center_text_color: Color of the center text (name or hex code).
         center_text_bg: Background color for center text (name or hex code).
+        center_text_threshold: Threshold for center text binarization (0-255). Creates pure black/white for STL.
         base_color: Background color of the QR code (name or hex code).
         qr_color: Color of the QR code modules (name or hex code).
         no_stl: If True, skip STL generation and only create PNG.
@@ -644,6 +655,7 @@ def qr_command(
                 text_color=center_text_color,
                 bg_color=center_text_bg,
                 convert_to_grayscale=not no_stl,
+                threshold=center_text_threshold if not no_stl else None,
             )
             logger.debug(f"Added center text: {center_text}")
 

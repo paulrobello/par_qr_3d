@@ -158,11 +158,16 @@ def load_font_with_fallbacks(
             paths_to_try.append(str(bundled_unicode))
             logger.debug("Added bundled DejaVu Sans as fallback")
     elif use_bold:
-        # For bold text, use Roboto Black
+        # For bold text, prioritize Roboto Black for maximum boldness
         bundled_bold = fonts_dir / "Roboto-Black.ttf"
         if is_valid_font_file(bundled_bold):
             paths_to_try.append(str(bundled_bold))
-            logger.debug("Using bundled Roboto Black font")
+            logger.debug("Using bundled Roboto Black font for bold text")
+        # Also add DejaVu Sans as fallback for better Unicode coverage
+        bundled_regular = fonts_dir / "DejaVuSans.ttf"
+        if is_valid_font_file(bundled_regular):
+            paths_to_try.append(str(bundled_regular))
+            logger.debug("Added bundled DejaVu Sans as fallback")
     else:
         # For regular text, use DejaVu Sans
         bundled_regular = fonts_dir / "DejaVuSans.ttf"

@@ -428,6 +428,7 @@ def add_center_text_to_qr(
     text_color: str = "black",
     bg_color: str = "white",
     convert_to_grayscale: bool = True,
+    threshold: int | None = None,
 ) -> Image.Image:
     """Add text or emoji to the center of a QR code.
 
@@ -440,6 +441,7 @@ def add_center_text_to_qr(
         text_color: Color of the text
         bg_color: Background color behind text
         convert_to_grayscale: If True, convert to grayscale (default for STL)
+        threshold: If provided, apply threshold to create pure black/white (0-255)
 
     Returns:
         New PIL Image with text added to center
@@ -456,8 +458,8 @@ def add_center_text_to_qr(
     qr_width, qr_height = qr_image.size
     text_area_size = int(min(qr_width, qr_height) * size_percent / 100)
 
-    # Load font with fallbacks, prioritizing emoji fonts if needed
-    font = load_font_with_fallbacks(font_size=font_size, font_name=font_name, text=text)
+    # Load font with fallbacks, using bold for better visibility
+    font = load_font_with_fallbacks(font_size=font_size, font_name=font_name, text=text, use_bold=True)
 
     # Create text image with background
     text_img = Image.new("RGB", (text_area_size, text_area_size), bg_color)
@@ -473,22 +475,30 @@ def add_center_text_to_qr(
         scale_factor = min((text_area_size * 0.9) / text_width, (text_area_size * 0.9) / text_height)
         new_font_size = int(font_size * scale_factor)
         # Reload font with new size
-        font = load_font_with_fallbacks(font_size=new_font_size, font_name=font_name, text=text)
+        font = load_font_with_fallbacks(font_size=new_font_size, font_name=font_name, text=text, use_bold=True)
         # Recalculate bbox
         bbox = draw.textbbox((0, 0), text, font=font)
         text_width = bbox[2] - bbox[0]
         text_height = bbox[3] - bbox[1]
 
-    # Center the text
-    x = (text_area_size - text_width) // 2
-    y = (text_area_size - text_height) // 2
+    # Center the text - account for baseline offset from bbox
+    x = (text_area_size - text_width) // 2 - bbox[0]
+    y = (text_area_size - text_height) // 2 - bbox[1]
 
     # Draw the text
     draw.text((x, y), text, fill=text_color, font=font)
 
     # Convert to grayscale if requested
     if convert_to_grayscale:
-        text_img = text_img.convert("L").convert("RGB")
+        text_img = text_img.convert("L")
+
+        # Apply threshold if provided to create pure black/white
+        if threshold is not None:
+            text_array = np.array(text_img)
+            binary_array = np.where(text_array > threshold, 255, 0).astype(np.uint8)
+            text_img = Image.fromarray(binary_array, mode="L")
+
+        text_img = text_img.convert("RGB")
 
     # Calculate position to center on QR code
     x_pos = (qr_width - text_area_size) // 2
@@ -498,6 +508,8 @@ def add_center_text_to_qr(
     result.paste(text_img, (x_pos, y_pos))
 
     mode_str = "grayscale" if convert_to_grayscale else "color"
+    if threshold is not None and convert_to_grayscale:
+        mode_str = "black/white"
     logger.info(f"Added {mode_str} text '{text}' at {size_percent}% size")
     return result
 
